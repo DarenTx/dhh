@@ -1,0 +1,39 @@
+<main role="main" aria-labelledby="login-heading">
+  @if (loading()) {
+    <div class="loading-container" aria-busy="true" aria-label="Loading...">
+      <div class="spinner"></div>
+    </div>
+  } @else {
+    <section class="login-card">
+      @if (callbackError()) {
+        <div class="error-banner" role="alert">
+          {{ callbackError() }}
+        </div>
+      }
+
+      <h1 id="login-heading">Sign in to Dahl Heritage Homes</h1>
+
+      <div class="actions">
+        <button
+          class="btn btn-google"
+          [disabled]="googleLoading()"
+          [attr.aria-busy]="googleLoading()"
+          (click)="signInWithGoogle()"
+        >
+          @if (googleLoading()) {
+            <span class="btn-spinner"></span>
+            Signing in…
+          } @else {
+            Sign in with Google
+          }
+        </button>
+
+        @if (googleError()) {
+          <p class="inline-error" role="alert">{{ googleError() }}</p>
+        }
+
+        <a routerLink="/login/magic-link" class="link-btn">Sign in with Email</a>
+      </div>
+    </section>
+  }
+</main>
