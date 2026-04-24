@@ -3,39 +3,21 @@
   justify-content: center;
   align-items: center;
   min-height: 100vh;
-  padding: 2rem 1rem;
-  background: #f8f5f0;
-}
-
-.login-wrapper {
-  width: 100%;
-  max-width: 420px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2rem;
-}
-
-.logo {
-  width: 100%;
-  max-width: 320px;
-  height: auto;
-  display: block;
+  padding: 1rem;
 }
 
 .loading-container {
   display: flex;
   justify-content: center;
   align-items: center;
-  min-height: 200px;
 }
 
 .spinner,
 .btn-spinner {
   width: 1.5rem;
   height: 1.5rem;
-  border: 3px solid #c9bfb0;
-  border-top-color: #2d4a2e;
+  border: 3px solid #ccc;
+  border-top-color: #333;
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
   display: inline-block;
@@ -56,50 +38,41 @@
 
 .login-card {
   width: 100%;
-  background: #ffffff;
-  border: 1px solid #e2d9ce;
-  border-radius: 12px;
+  max-width: 400px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
   padding: 2rem;
-  box-shadow: 0 4px 24px rgba(45, 74, 46, 0.08);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .error-banner {
   background: #fee2e2;
   color: #991b1b;
   padding: 0.75rem 1rem;
-  border-radius: 6px;
-  margin-bottom: 1.25rem;
-  font-size: 0.9rem;
+  border-radius: 4px;
+  margin-bottom: 1rem;
 }
 
 h1 {
   margin: 0 0 1.5rem;
-  font-family: 'Playfair Display', Georgia, 'Times New Roman', serif;
-  font-size: 1.375rem;
-  font-weight: 600;
-  color: #2c3d2e;
-  text-align: center;
-  letter-spacing: 0.01em;
+  font-size: 1.5rem;
 }
 
 .actions {
   display: flex;
   flex-direction: column;
-  gap: 0.875rem;
+  gap: 0.75rem;
 }
 
 .btn {
   display: flex;
   justify-content: center;
   align-items: center;
-  padding: 0.7rem 1rem;
-  border-radius: 6px;
-  font-size: 0.9375rem;
+  padding: 0.625rem 1rem;
+  border-radius: 4px;
+  font-size: 1rem;
   cursor: pointer;
   border: none;
-  transition:
-    background 0.15s,
-    box-shadow 0.15s;
 
   &:disabled {
     opacity: 0.6;
@@ -123,7 +96,7 @@ h1 {
   }
 
   &:focus-visible {
-    outline: 2px solid #2d4a2e;
+    outline: 2px solid #4285f4;
     outline-offset: 2px;
   }
 }
@@ -137,64 +110,85 @@ h1 {
 .link-btn {
   text-align: center;
   padding: 0.5rem;
-  color: #3d6b3f;
+  color: #4285f4;
   text-decoration: none;
-  font-size: 0.9375rem;
 
   &:hover {
     text-decoration: underline;
   }
+}
 
-  &:focus-visible {
-    outline: 2px solid #2d4a2e;
-    outline-offset: 2px;
+.inline-error {
+  color: #991b1b;
+  font-size: 0.875rem;
+  margin: 0;
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: #888;
+  font-size: 0.875rem;
+
+  &::before,
+  &::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: #ddd;
+  }
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: 1rem;
+
+  label {
+    font-weight: 500;
+  }
+
+  input {
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #ccc;
     border-radius: 4px;
-  }
-}
+    font-size: 1rem;
 
-.inline-error {
-  color: #991b1b;
-  font-size: 0.875rem;
-  margin: 0;
-  text-align: center;
-}
-
-.legal-links {
-  margin: 1.25rem 0 0;
-  font-size: 0.8rem;
-  color: #7a6e62;
-  text-align: center;
-  line-height: 1.5;
-
-  a {
-    color: #3d6b3f;
-    text-decoration: underline;
-
-    &:hover {
-      color: #2d4a2e;
+    &[aria-invalid='true'] {
+      border-color: #dc2626;
     }
   }
 }
 
-.legal-links {
-  margin: 1.25rem 0 0;
-  font-size: 0.8rem;
-  color: #718096;
-  text-align: center;
-  line-height: 1.5;
+.field-error {
+  color: #dc2626;
+  font-size: 0.875rem;
+  min-height: 1.25rem;
+}
 
-  a {
-    color: #4285f4;
-    text-decoration: none;
+.server-error {
+  color: #991b1b;
+  background: #fee2e2;
+  padding: 0.75rem 1rem;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+  font-size: 0.875rem;
+}
 
-    &:hover {
-      text-decoration: underline;
-    }
+.btn-primary {
+  background: #4285f4;
+  color: #fff;
+  width: 100%;
+  margin-top: 0.25rem;
+
+  &:hover:not(:disabled) {
+    background: #357ae8;
   }
 }
 
-.inline-error {
-  color: #991b1b;
-  font-size: 0.875rem;
-  margin: 0;
+.btn-spinner-primary {
+  border-color: rgba(255, 255, 255, 0.5);
+  border-top-color: #fff;
 }

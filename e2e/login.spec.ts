@@ -16,37 +16,25 @@ test.describe('Login page', () => {
   });
 
   test('shows Sign in with Google button', async ({ page }) => {
-    await expect(page.getByRole('button', { name: /sign in with google/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /continue with google/i })).toBeVisible();
   });
 
-  test('shows Sign in with Email link', async ({ page }) => {
-    await expect(page.getByRole('link', { name: /sign in with email/i })).toBeVisible();
-  });
-
-  test('navigates to /login/magic-link when Sign in with Email is clicked', async ({ page }) => {
-    await page.getByRole('link', { name: /sign in with email/i }).click();
-    await expect(page).toHaveURL(`${BASE_URL}/login/magic-link`);
-  });
-
-  test('displays error banner when ?error= query param is present', async ({ page }) => {
-    const errorMsg = encodeURIComponent('Session expired. Please sign in again.');
-    await page.goto(`${BASE_URL}/login?error=${errorMsg}`);
-    await expect(page.locator('.error-banner')).toContainText('Session expired');
-  });
-});
-
-test.describe('Magic Link page', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto(`${BASE_URL}/login/magic-link`);
-  });
-
-  test('shows the email input and submit button', async ({ page }) => {
+  test('shows email input and Send Login Link button', async ({ page }) => {
     await expect(page.locator('#email')).toBeVisible();
-    await expect(page.getByRole('button', { name: /send sign-in link/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /send login link/i })).toBeVisible();
+  });
+
+  test('email input has associated label', async ({ page }) => {
+    await expect(page.locator('label[for="email"]')).toBeVisible();
+  });
+
+  test('email input has aria-describedby pointing to error element', async ({ page }) => {
+    const input = page.locator('#email');
+    await expect(input).toHaveAttribute('aria-describedby', 'email-error');
   });
 
   test('shows required validation error on empty submit', async ({ page }) => {
-    await page.getByRole('button', { name: /send sign-in link/i }).click();
+    await page.getByRole('button', { name: /send login link/i }).click();
     await expect(page.locator('#email-error')).toContainText('Email is required');
   });
 
@@ -59,27 +47,23 @@ test.describe('Magic Link page', () => {
   test('shows internal domain error for dahlheritagehomes.com email', async ({ page }) => {
     await page.locator('#email').fill('user@dahlheritagehomes.com');
     await page.locator('#email').blur();
-    await expect(page.locator('#email-error')).toContainText('Internal email');
+    await expect(page.locator('#email-error')).toContainText(
+      'Do not use a dahlheritagehomes.com email address.',
+    );
   });
 
   test('shows internal domain error for subdomain of dahlheritagehomes.com', async ({ page }) => {
     await page.locator('#email').fill('user@sub.dahlheritagehomes.com');
     await page.locator('#email').blur();
-    await expect(page.locator('#email-error')).toContainText('Internal email');
+    await expect(page.locator('#email-error')).toContainText(
+      'Do not use a dahlheritagehomes.com email address.',
+    );
   });
 
-  test('back link navigates to /login', async ({ page }) => {
-    await page.getByRole('link', { name: /back to sign in/i }).click();
-    await expect(page).toHaveURL(`${BASE_URL}/login`);
-  });
-
-  test('email input has aria-describedby pointing to error element', async ({ page }) => {
-    const input = page.locator('#email');
-    await expect(input).toHaveAttribute('aria-describedby', 'email-error');
-  });
-
-  test('email input has associated label', async ({ page }) => {
-    await expect(page.locator('label[for="email"]')).toBeVisible();
+  test('displays error banner when ?error= query param is present', async ({ page }) => {
+    const errorMsg = encodeURIComponent('Session expired. Please sign in again.');
+    await page.goto(`${BASE_URL}/login?error=${errorMsg}`);
+    await expect(page.locator('.error-banner')).toContainText('Session expired');
   });
 });
 
