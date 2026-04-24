@@ -1,9 +1,11 @@
-<main role="main" aria-labelledby="login-heading">
+<div class="login-wrapper">
   @if (loading()) {
     <div class="loading-container" aria-busy="true" aria-label="Loading...">
       <div class="spinner"></div>
     </div>
   } @else {
+    <img src="/dahl-heritage-homes.png" alt="Dahl Heritage Homes" class="logo" />
+
     <section class="login-card">
       @if (callbackError()) {
         <div class="error-banner" role="alert">
@@ -11,7 +13,7 @@
         </div>
       }
 
-      <h1 id="login-heading">Sign in to Dahl Heritage Homes</h1>
+      <h1 id="login-heading">Welcome Back</h1>
 
       <div class="actions">
         <button
@@ -66,4 +68,4 @@
       </p>
     </section>
   }
-</main>
+</div>
