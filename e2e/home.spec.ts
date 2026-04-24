@@ -1,7 +1,63 @@
 import { test, expect } from '@playwright/test';
 
+const SUPABASE_PROJECT_REF = 'vmzmwdqnnnojzrjpdlnj';
+
 test.describe('Home page', () => {
   test.beforeEach(async ({ page }) => {
+    // Inject a mock Supabase session into localStorage before the page loads so
+    // the authGuard finds a valid session and allows access to the home route.
+    await page.addInitScript((projectRef: string) => {
+      const toBase64Url = (str: string) =>
+        btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+      const header = toBase64Url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+      const payload = toBase64Url(
+        JSON.stringify({
+          sub: 'test-user-id',
+          aud: 'authenticated',
+          exp: 9999999999,
+          iat: 1700000000,
+          role: 'authenticated',
+          email: 'test@example.com',
+        }),
+      );
+      const mockUser = {
+        id: 'test-user-id',
+        aud: 'authenticated',
+        role: 'authenticated',
+        email: 'test@example.com',
+        email_confirmed_at: '2024-01-01T00:00:00.000Z',
+        created_at: '2024-01-01T00:00:00.000Z',
+        updated_at: '2024-01-01T00:00:00.000Z',
+        app_metadata: {},
+        user_metadata: {},
+      };
+      localStorage.setItem(
+        `sb-${projectRef}-auth-token`,
+        JSON.stringify({
+          access_token: `${header}.${payload}.mocksig`,
+          token_type: 'bearer',
+          expires_in: 3600,
+          expires_at: 9999999999,
+          refresh_token: 'mock-refresh-token',
+          user: mockUser,
+        }),
+      );
+    }, SUPABASE_PROJECT_REF);
+
+    // Intercept Supabase auth API calls as a safety net to prevent network errors.
+    await page.route('**/auth/v1/**', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 'test-user-id',
+          aud: 'authenticated',
+          role: 'authenticated',
+          email: 'test@example.com',
+        }),
+      }),
+    );
+
     await page.goto('/');
   });
 

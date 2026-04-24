@@ -85,8 +85,14 @@ test.describe('Magic Link page', () => {
 
 test.describe('Auth Callback page', () => {
   test('renders loading indicator while processing', async ({ page }) => {
-    // Intercept the page before it processes the callback
-    await page.goto(`${BASE_URL}/login/callback`);
+    // Intercept the token exchange so the spinner stays visible during assertion.
+    // Without this, handleAuthCallback() would throw immediately (no code) and
+    // redirect to /login before the assertion can run.
+    await page.route('**/auth/v1/token*', async (route) => {
+      await new Promise((r) => setTimeout(r, 1000));
+      await route.abort();
+    });
+    await page.goto(`${BASE_URL}/login/callback?code=test-code`);
     // The page should at minimum render without crashing
     await expect(page.locator('.spinner')).toBeVisible();
   });
