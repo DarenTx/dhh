@@ -19,12 +19,29 @@ import { NAV_ITEMS, NavItem } from '../nav-config';
     }
 
     .nav-brand {
-      padding: 0 1.25rem 1.5rem;
-      font-size: 1.125rem;
-      font-weight: 700;
-      color: #2d3748;
+      padding: 0 1rem 1.25rem;
       border-bottom: 1px solid #e2e8f0;
       margin-bottom: 0.75rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.625rem;
+    }
+
+    .nav-brand img {
+      width: 80px;
+      height: 80px;
+      object-fit: contain;
+    }
+
+    .nav-brand span {
+      font-family: 'Playfair Display', Georgia, 'Times New Roman', serif;
+      font-size: 1rem;
+      font-weight: 600;
+      color: #2c3d2e;
+      letter-spacing: 0.01em;
+      text-align: center;
+      line-height: 1.3;
     }
 
     nav {
@@ -61,7 +78,10 @@ import { NAV_ITEMS, NavItem } from '../nav-config';
     }
   `,
   template: `
-    <div class="nav-brand">DHH</div>
+    <div class="nav-brand">
+      <img src="/dahl-heritage-homes.png" alt="Dahl Heritage Homes logo" />
+      <span>Dahl Heritage Homes</span>
+    </div>
     <nav>
       @for (item of visibleItems(); track item.path) {
         <a

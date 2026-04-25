@@ -72,43 +72,62 @@ _This phase is the first priority after Phase 1._
 
 **Fields:**
 
-| Field          | Notes               |
-| -------------- | ------------------- |
-| Address        | Full street address |
-| Year built     |                     |
-| Square footage |                     |
-| Bedrooms       |                     |
-| Bathrooms      |                     |
-| Notes          | Free-form one-liner |
+| Field          | Notes                                                                             |
+| -------------- | --------------------------------------------------------------------------------- |
+| Address        | Structured: Line 1 (required), Line 2, City, State (US dropdown, default OK), Zip |
+| Year built     | Optional                                                                          |
+| Square footage | Optional                                                                          |
+| Bedrooms       | Optional integer                                                                  |
+| Bathrooms      | Optional — dropdown: 1, 1.5, 2, 2.5, 3                                            |
+| Cover photo    | Optional — uploaded to private Supabase Storage bucket `property-photos`          |
+
+**No `notes` field on the table.** Notes are stored in the shared `notes` table (see §2.5).
 
 **Derived status** (no explicit status field):
 
-- _Occupied_ — property has an active lease
+- _Occupied_ — property has an active lease (`leases.status = 'active'`)
 - _Vacant_ — property has no active lease
 
-**Property detail page surfaces:**
+**Soft delete:** `is_active` boolean — deactivated properties never appear in the UI.
 
-- Active lease and linked tenants
-- Inspection history
-- Expenses _(Managers only)_
-- Gmail emails tagged with this property's label _(read-only links to Gmail)_
-- Google Drive documents
+**Property list view:** Card grid sorted by `address_line1`; All / Unoccupied filter toggle; cover photo on card (placeholder if none); Occupied / Vacant badge.
+
+**Unoccupied property:** "Start Tenancy" button on the detail Overview tab launches the 3-step New Tenancy Wizard.
+
+**Property detail page tabs:**
+
+| Tab         | Contents                                                  | Visible to    |
+| ----------- | --------------------------------------------------------- | ------------- |
+| Overview    | Cover photo, address, details, edit button                | Everyone      |
+| Leases      | Active lease card + history; Start New Lease button       | Everyone      |
+| Tenants     | Tenants on active lease; phone/email hidden for View Only | Everyone      |
+| Notes       | Shared notes for this property                            | Everyone      |
+| Expenses    | _(stub — Phase 3)_                                        | Managers only |
+| Inspections | _(stub — Phase 5)_                                        | Everyone      |
+| Documents   | _(stub — Phase 4)_                                        | Everyone      |
+| Emails      | _(stub — Phase 4)_                                        | Everyone      |
 
 ---
 
 ### 2.2 Tenants
 
+Tenants have a dedicated nav item visible to all roles (between Properties and Expenses).
+
 **Fields:**
 
-| Field         | Notes               |
-| ------------- | ------------------- |
-| Full name     |                     |
-| Phone         |                     |
-| Email         |                     |
-| Move-in date  |                     |
-| Move-out date |                     |
-| Notes         | Free-form one-liner |
-| Linked lease  |                     |
+| Field      | Notes                                        |
+| ---------- | -------------------------------------------- |
+| First name | Required                                     |
+| Last name  | Required                                     |
+| Phone      | Optional — hidden from View Only users (PII) |
+| Email      | Optional — hidden from View Only users (PII) |
+
+**No `notes` field on the table.** Notes stored in the shared `notes` table (see §2.5).
+Move-in / move-out dates are not tracked on tenants; lease start/end dates serve this purpose.
+
+**Soft delete:** `is_active` boolean.
+
+**Tenant detail page:** tenant info (PII gated by role), lease history for this tenant, notes section, deactivate/edit buttons (Managers only).
 
 ---
 
@@ -116,19 +135,26 @@ _This phase is the first priority after Phase 1._
 
 **Fields:**
 
-| Field            | Notes                                        |
-| ---------------- | -------------------------------------------- |
-| Start date       |                                              |
-| End date         |                                              |
-| Monthly rent     |                                              |
-| Security deposit |                                              |
-| Lease Notes      | Free-form one-liner                          |
-| Linked tenants   | Multiple tenants per lease (e.g., roommates) |
+| Field            | Notes                                                                |
+| ---------------- | -------------------------------------------------------------------- |
+| Start date       | Required — informational only; `status` field drives active/inactive |
+| End date         | Optional — informational only                                        |
+| Monthly rent     | Required                                                             |
+| Security deposit | Required                                                             |
+| Document URL     | Optional — Google Drive link (manual entry; Phase 4 adds picker)     |
+| Status           | `active` or `inactive` — controls "one active lease" rule            |
+| Linked tenants   | Multiple tenants per lease via `lease_tenants` junction table        |
+
+**No `notes` field on the table.** Notes stored in the shared `notes` table (see §2.5).
 
 **Rules:**
 
-- One active lease per property at a time
+- One active lease per property at a time — enforced by a DB partial unique index on `(property_id) WHERE status = 'active' AND is_active = true`
+- Lease deactivation: explicit "Deactivate" button (quick action) and editable `status` field on the lease edit form
+- UI blocks "Start New Lease" when an active lease exists (button disabled with tooltip)
 - A lease can have multiple tenants
+
+**Soft delete:** `is_active` boolean; history lists show all leases with visual distinction (active = highlighted, inactive = muted).
 
 ---
 
@@ -136,11 +162,42 @@ _This phase is the first priority after Phase 1._
 
 Shown immediately after login. Content respects role visibility rules.
 
-| Section                                                | Visible to    |
-| ------------------------------------------------------ | ------------- |
-| All properties with derived status (Occupied / Vacant) | Everyone      |
-| Pending approvals count + link to approval inbox       | Managers only |
-| Recent expenses                                        | Managers only |
+| Section                                                     | Visible to    |
+| ----------------------------------------------------------- | ------------- |
+| All active properties with Occupied / Vacant status         | Everyone      |
+| Pending approvals count (current user only) + link to inbox | Managers only |
+| Recent expenses (last 4 weeks)                              | Managers only |
+
+---
+
+### 2.5 Shared Notes Table
+
+A single `notes` table serves properties, tenants, and leases. Each note has exactly one parent (enforced by a DB CHECK constraint).
+
+| Field      | Notes                                          |
+| ---------- | ---------------------------------------------- |
+| content    | Required text                                  |
+| parent     | One of: `property_id`, `tenant_id`, `lease_id` |
+| created_by | Auth user reference                            |
+| is_active  | Soft delete — notes are never hard deleted     |
+
+**Permissions:** All authenticated users can create notes. Admins and Managers can deactivate (soft delete) any note. Notes cannot be edited after creation.
+
+---
+
+### 2.6 Database Tables
+
+| Table           | Purpose                                    |
+| --------------- | ------------------------------------------ |
+| `properties`    | Property records                           |
+| `tenants`       | Tenant records                             |
+| `leases`        | Lease records linked to a property         |
+| `lease_tenants` | Junction: many tenants ↔ many leases       |
+| `notes`         | Shared notes for properties/tenants/leases |
+
+All tables have `is_active`, `created_by`, `created_at`, `updated_at`. Audit triggers applied to all 5 tables.
+
+**Seed data:** 13 properties loaded from initial property list (Yukon, OK 73099).
 
 ---
 
@@ -298,7 +355,7 @@ Photos are uploaded to the LLC's Google Photos account with the note embedded as
 
 | #   | Topic                             | Notes                                                                                                                                                                                                  |
 | --- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 1   | **Lease PDFs**                    | Not explicitly scoped to Google Drive yet; revisit during Phase 2 lease implementation                                                                                                                 |
+| 1   | **Lease PDFs**                    | Phase 2 adds a `document_url` text field on leases for manual Google Drive link entry. Full Drive picker integration deferred to Phase 4.                                                              |
 | 2   | **Google Photos API feasibility** | Library API write restrictions may require using Supabase Storage as a fallback; evaluate during Phase 5                                                                                               |
 | 3   | **Expense reporting / export**    | No reporting was scoped; a CSV or PDF export for tax season may be a low-effort addition worth adding to Phase 3                                                                                       |
 | 4   | **Privacy & Terms pages**         | Stub components exist (`/privacy`, `/tos`) but content has not been written; required before public launch                                                                                             |

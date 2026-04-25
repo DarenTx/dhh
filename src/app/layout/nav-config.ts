@@ -8,6 +8,7 @@ export interface NavItem {
 export const NAV_ITEMS: NavItem[] = [
   { label: 'Dashboard', path: '/dashboard', icon: 'heroHome', minRole: 'all' },
   { label: 'Properties', path: '/properties', icon: 'heroBuildingOffice2', minRole: 'all' },
+  { label: 'Tenants', path: '/tenants', icon: 'heroUsers', minRole: 'all' },
   { label: 'Expenses', path: '/expenses', icon: 'heroCreditCard', minRole: 'manager' },
   {
     label: 'Guaranteed Payments',
