@@ -6,11 +6,19 @@ import { authGuard } from './auth.guard';
 import { AuthenticationService } from './authentication.service';
 import { SUPABASE_CLIENT } from './supabase.provider';
 
+function makeJwt(appMetadata: Record<string, unknown>): string {
+  const payload = btoa(JSON.stringify({ sub: '123', app_metadata: appMetadata }));
+  return `header.${payload}.sig`;
+}
+
 describe('authGuard', () => {
-  const mockSession = { user: { id: '123' } };
+  const mockSession = { access_token: makeJwt({ is_active: true }), user: { id: '123' } };
 
   function setup(session: unknown) {
-    const mockAuth = { getSession: vi.fn().mockReturnValue(of(session)) };
+    const mockAuth = {
+      getSession: vi.fn().mockReturnValue(of(session)),
+      signOutSilent: vi.fn().mockResolvedValue(undefined),
+    };
 
     TestBed.configureTestingModule({
       providers: [
@@ -38,6 +46,31 @@ describe('authGuard', () => {
       });
     });
     expect(result).toBe(true);
+  });
+
+  it('returns true when session has is_active: true', async () => {
+    const session = { access_token: makeJwt({ is_active: true }), user: { id: '123' } };
+    setup(session);
+    const result = await TestBed.runInInjectionContext(() => {
+      return new Promise<boolean | UrlTree>((resolve) => {
+        authGuard().subscribe((v) => resolve(v));
+      });
+    });
+    expect(result).toBe(true);
+  });
+
+  it('redirects to /login?error=account_deactivated when is_active is false', async () => {
+    const session = { access_token: makeJwt({ is_active: false }), user: { id: '123' } };
+    setup(session);
+    const result = await TestBed.runInInjectionContext(() => {
+      return new Promise<boolean | UrlTree>((resolve) => {
+        authGuard().subscribe((v) => resolve(v));
+      });
+    });
+    const router = TestBed.inject(Router);
+    expect(result).toEqual(
+      router.createUrlTree(['/login'], { queryParams: { error: 'account_deactivated' } }),
+    );
   });
 
   it('returns a UrlTree to /login when no session exists', async () => {

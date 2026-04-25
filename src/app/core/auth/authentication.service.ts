@@ -51,8 +51,12 @@ export class AuthenticationService {
     if (error) throw error;
   }
 
-  async signOut(): Promise<void> {
+  async signOutSilent(): Promise<void> {
     await this.supabase.auth.signOut();
+  }
+
+  async signOut(): Promise<void> {
+    await this.signOutSilent();
     await this.router.navigate(['/login']);
   }
 }

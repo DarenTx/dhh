@@ -5,6 +5,12 @@
   box-sizing: border-box;
 }
 
+:root {
+  --nav-sidebar-width: 16rem;
+  --nav-bottom-height: 4rem;
+  --z-nav: 40;
+}
+
 body {
   margin: 0;
   font-family:
