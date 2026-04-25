@@ -9,6 +9,7 @@ import {
   heroCheckCircle,
   heroCog6Tooth,
   heroUserGroup,
+  heroUsers,
   heroClipboardDocumentList,
 } from '@ng-icons/heroicons/outline';
 
@@ -29,6 +30,7 @@ export const appConfig: ApplicationConfig = {
       heroCheckCircle,
       heroCog6Tooth,
       heroUserGroup,
+      heroUsers,
       heroClipboardDocumentList,
     }),
     provideServiceWorker('ngsw-worker.js', {

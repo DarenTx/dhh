@@ -169,7 +169,7 @@ interface DashboardStats {
               Expenses
             </a>
             <a class="link-card" routerLink="/approvals">
-              <ng-icon name="heroClipboardDocumentCheck" size="18" />
+              <ng-icon name="heroCheckCircle" size="18" />
               Approvals
             </a>
           }
