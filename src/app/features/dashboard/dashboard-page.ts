@@ -216,14 +216,14 @@ interface DashboardStats {
             <ng-icon name="heroBuildingOffice2" size="18" />
             Properties
           </a>
-          <a class="link-card" routerLink="/tenants">
-            <ng-icon name="heroUsers" size="18" />
-            Tenants
-          </a>
           @if (canManage()) {
             <a class="link-card" routerLink="/expenses">
               <ng-icon name="heroCreditCard" size="18" />
               Expenses
+            </a>
+            <a class="link-card" routerLink="/guaranteed-payments">
+              <ng-icon name="heroClock" size="18" />
+              Guaranteed Payments
             </a>
             <a class="link-card" routerLink="/approvals">
               <ng-icon name="heroCheckCircle" size="18" />
