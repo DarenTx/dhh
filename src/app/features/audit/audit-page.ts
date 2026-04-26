@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/cor
 import { ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { DatePipe, JsonPipe } from '@angular/common';
+import { NgIconComponent } from '@ng-icons/core';
 import { AuditRow, AuditService, AuditLoadParams } from '../../core/services/audit.service';
 
 const PAGE_SIZE = 150;
@@ -9,7 +10,7 @@ const PAGE_SIZE = 150;
 @Component({
   selector: 'app-audit-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, DatePipe, JsonPipe],
+  imports: [FormsModule, DatePipe, JsonPipe, NgIconComponent],
   styles: `
     :host {
       display: block;
@@ -67,6 +68,9 @@ const PAGE_SIZE = 150;
     }
 
     .btn {
+      display: flex;
+      align-items: center;
+      gap: 0.375rem;
       padding: 0.375rem 0.875rem;
       border-radius: 0.375rem;
       font-size: 0.875rem;
@@ -76,12 +80,12 @@ const PAGE_SIZE = 150;
     }
 
     .btn-primary {
-      background: #4299e1;
+      background: #2b6cb0;
       color: #fff;
     }
     .btn-ghost {
       background: transparent;
-      color: #4299e1;
+      color: #2b6cb0;
       border: 1px solid #bee3f8;
     }
 
@@ -204,7 +208,10 @@ const PAGE_SIZE = 150;
           <option value="DELETE">DELETE</option>
         </select>
       </div>
-      <button class="btn btn-primary" (click)="applyFilters()">Apply</button>
+      <button class="btn btn-primary" (click)="applyFilters()">
+        <ng-icon name="heroFunnel" size="16" />
+        Apply
+      </button>
       <button class="btn btn-ghost" (click)="clearFilters()">Clear</button>
     </div>
 

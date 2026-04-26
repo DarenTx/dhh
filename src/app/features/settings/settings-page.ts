@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { ReactiveFormsModule, FormsModule, FormBuilder, Validators } from '@angular/forms';
+import { NgIconComponent } from '@ng-icons/core';
 import {
   AppSettings,
   ExpenseSubcategory,
@@ -10,7 +11,7 @@ import {
 @Component({
   selector: 'app-settings-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, FormsModule],
+  imports: [ReactiveFormsModule, FormsModule, NgIconComponent],
   styles: `
     :host {
       display: block;
@@ -86,6 +87,9 @@ import {
     }
 
     .btn {
+      display: flex;
+      align-items: center;
+      gap: 0.375rem;
       padding: 0.5rem 1rem;
       border-radius: 0.375rem;
       font-size: 0.9375rem;
@@ -101,7 +105,7 @@ import {
     }
 
     .btn-primary {
-      background: #4299e1;
+      background: #2b6cb0;
       color: #fff;
     }
     .btn-sm {
@@ -213,6 +217,7 @@ import {
           </div>
 
           <button class="btn btn-primary" type="submit" [disabled]="savingSettings()">
+            <ng-icon name="heroCheckCircle" size="16" />
             {{ savingSettings() ? 'Saving…' : 'Save Settings' }}
           </button>
         </form>
@@ -259,7 +264,10 @@ import {
                   [(ngModel)]="newSubName"
                   [ngModelOptions]="{ standalone: true }"
                 />
-                <button class="btn btn-primary btn-sm" (click)="addSub(cat.id)">Add</button>
+                <button class="btn btn-primary btn-sm" (click)="addSub(cat.id)">
+                  <ng-icon name="heroPlus" size="14" />
+                  Add
+                </button>
               </div>
             </div>
           }

@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
+import { NgIconComponent } from '@ng-icons/core';
 import { AuthenticationService } from '../../core/auth/authentication.service';
 import { AdminService, UserRecord, UserRole } from '../../core/services/admin.service';
 import { map } from 'rxjs';
@@ -7,7 +8,7 @@ import { map } from 'rxjs';
 @Component({
   selector: 'app-admin-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule],
+  imports: [ReactiveFormsModule, NgIconComponent],
   styles: `
     :host {
       display: block;
@@ -131,6 +132,9 @@ import { map } from 'rxjs';
     }
 
     .btn {
+      display: flex;
+      align-items: center;
+      gap: 0.375rem;
       padding: 0.5rem 1rem;
       border-radius: 0.375rem;
       font-size: 0.9375rem;
@@ -146,7 +150,7 @@ import { map } from 'rxjs';
     }
 
     .btn-primary {
-      background: #4299e1;
+      background: #2b6cb0;
       color: #fff;
     }
     .btn-danger {
@@ -263,6 +267,7 @@ import { map } from 'rxjs';
           </div>
 
           <button class="btn btn-primary" type="submit" [disabled]="submitting()">
+            <ng-icon name="heroEnvelope" size="16" />
             {{ submitting() ? 'Sending…' : 'Send Invite' }}
           </button>
         </form>

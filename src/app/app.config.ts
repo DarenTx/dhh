@@ -13,6 +13,9 @@ import {
   heroClipboardDocumentList,
   heroEllipsisHorizontal,
   heroArrowRightOnRectangle,
+  heroPlus,
+  heroEnvelope,
+  heroFunnel,
 } from '@ng-icons/heroicons/outline';
 
 import { routes } from './app.routes';
@@ -36,6 +39,9 @@ export const appConfig: ApplicationConfig = {
       heroClipboardDocumentList,
       heroEllipsisHorizontal,
       heroArrowRightOnRectangle,
+      heroPlus,
+      heroEnvelope,
+      heroFunnel,
     }),
     provideServiceWorker('ngsw-worker.js', {
       enabled: !isDevMode(),
