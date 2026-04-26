@@ -31,6 +31,7 @@ import { SidebarComponent } from '../sidebar/sidebar.component';
       flex-shrink: 0;
       display: flex;
       align-items: center;
+      gap: 0.75rem;
       padding: 0 1.5rem;
       height: 3.5rem;
       background: #fff;
@@ -40,6 +41,18 @@ import { SidebarComponent } from '../sidebar/sidebar.component';
       font-weight: 600;
       color: #2c3d2e;
       letter-spacing: 0.01em;
+    }
+
+    .top-bar-logo {
+      height: 2.5rem;
+      width: 2.5rem;
+      object-fit: contain;
+    }
+
+    @media (min-width: 768px) {
+      .top-bar-logo {
+        display: none;
+      }
     }
 
     .content {
@@ -75,7 +88,10 @@ import { SidebarComponent } from '../sidebar/sidebar.component';
   template: `
     <app-sidebar class="sidebar" />
     <div class="main-area">
-      <div class="top-bar">Dahl Heritage Homes</div>
+      <div class="top-bar">
+        <img class="top-bar-logo" src="/dahl-heritage-homes.png" alt="Dahl Heritage Homes logo" />
+        Dahl Heritage Homes
+      </div>
       <main class="content">
         <router-outlet />
       </main>
