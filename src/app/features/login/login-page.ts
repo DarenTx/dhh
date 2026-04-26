@@ -53,6 +53,8 @@ export class LoginPage implements OnInit {
     const rawError = this.route.snapshot.queryParamMap.get('error');
     if (rawError) {
       this.callbackError.set(decodeURIComponent(rawError));
+      this.loading.set(false);
+      return;
     }
 
     this.auth

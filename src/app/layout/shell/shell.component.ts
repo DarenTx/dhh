@@ -64,7 +64,7 @@ import { SidebarComponent } from '../sidebar/sidebar.component';
     }
 
     @media (min-width: 768px) {
-      .top-bar-logo {
+      .top-bar {
         display: none;
       }
     }
