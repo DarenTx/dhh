@@ -10,6 +10,7 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { Title } from '@angular/platform-browser';
 import { DecimalPipe, CurrencyPipe, DatePipe, TitleCasePipe } from '@angular/common';
 import { NgIconComponent } from '@ng-icons/core';
+import { forkJoin, of } from 'rxjs';
 import {
   Property,
   PropertyWithOccupancy,
@@ -322,6 +323,21 @@ const TABS: { id: TabId; label: string; managerOnly?: boolean }[] = [
       color: #718096;
     }
 
+    .doc-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.375rem;
+      margin-top: 0.75rem;
+      font-size: 0.875rem;
+      color: #2b6cb0;
+      text-decoration: none;
+      font-weight: 500;
+    }
+
+    .doc-link:hover {
+      text-decoration: underline;
+    }
+
     .loading {
       color: #718096;
     }
@@ -558,7 +574,7 @@ const TABS: { id: TabId; label: string; managerOnly?: boolean }[] = [
           @case ('leases') {
             @if (canManage()) {
               <div class="action-bar">
-                <button class="btn-primary" (click)="showLeaseForm.set(true)">
+                <button class="btn-primary" (click)="addLease()">
                   <ng-icon name="heroPlus" size="16" />
                   Add lease
                 </button>
@@ -579,6 +595,32 @@ const TABS: { id: TabId; label: string; managerOnly?: boolean }[] = [
                     }
                     <span>Rent: {{ lease.monthly_rent | currency }}</span>
                     <span>Deposit: {{ lease.security_deposit | currency }}</span>
+                  </div>
+                  <div
+                    style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;"
+                  >
+                    @if (leaseDocumentLinks()[lease.id]) {
+                      <a
+                        class="doc-link"
+                        [href]="leaseDocumentLinks()[lease.id]"
+                        target="_blank"
+                        rel="noopener"
+                      >
+                        <ng-icon name="heroDocument" size="14" />
+                        View lease document
+                      </a>
+                    }
+
+                    @if (canManage()) {
+                      <button
+                        class="btn-primary"
+                        style="padding:0.375rem 0.75rem;font-size:0.8125rem;flex-shrink:0"
+                        (click)="editLease(lease)"
+                      >
+                        <ng-icon name="heroPencilSquare" size="14" />
+                        Edit
+                      </button>
+                    }
                   </div>
                 </div>
               }
@@ -729,13 +771,14 @@ const TABS: { id: TabId; label: string; managerOnly?: boolean }[] = [
 
     <!-- Add lease modal -->
     @if (showLeaseForm()) {
-      <div class="modal-backdrop" (click)="showLeaseForm.set(false)">
+      <div class="modal-backdrop" (click)="closeLeaseForm()">
         <div class="modal" (click)="$event.stopPropagation()">
-          <h2>Add lease</h2>
+          <h2>{{ editingLease() ? 'Edit lease' : 'Add lease' }}</h2>
           <app-lease-form
+            [lease]="editingLease()"
             [propertyId]="property()!.id"
             (saved)="onLeaseSaved($event)"
-            (cancelled)="showLeaseForm.set(false)"
+            (cancelled)="closeLeaseForm()"
           />
         </div>
       </div>
@@ -829,6 +872,7 @@ export class PropertyDetailPage implements OnInit {
 
   readonly leases = signal<Lease[]>([]);
   readonly leasesLoading = signal(false);
+  readonly leaseDocumentLinks = signal<Record<string, string>>({});
 
   readonly tenants = signal<Tenant[]>([]);
   readonly tenantsLoading = signal(false);
@@ -862,6 +906,7 @@ export class PropertyDetailPage implements OnInit {
   readonly showWizard = signal(false);
   readonly showMarketValueForm = signal(false);
   readonly showImagePreview = signal(false);
+  readonly editingLease = signal<Lease | null>(null);
   readonly editingMarketValue = signal<PropertyMarketValue | null>(null);
 
   readonly marketValues = signal<PropertyMarketValue[]>([]);
@@ -919,9 +964,42 @@ export class PropertyDetailPage implements OnInit {
     this.leaseService.getLeasesForProperty(propertyId).subscribe({
       next: (leases) => {
         this.leases.set(leases);
+        this.loadLeaseDocumentLinks(leases);
         this.leasesLoading.set(false);
       },
       error: () => this.leasesLoading.set(false),
+    });
+  }
+
+  private loadLeaseDocumentLinks(leases: Lease[]): void {
+    const leasesWithDocs = leases.filter((lease) => !!lease.document_url);
+    if (leasesWithDocs.length === 0) {
+      this.leaseDocumentLinks.set({});
+      return;
+    }
+
+    forkJoin(
+      leasesWithDocs.map((lease) => {
+        const documentPath = lease.document_url!;
+        if (/^https?:\/\//i.test(documentPath)) {
+          return of({ id: lease.id, url: documentPath });
+        }
+
+        return this.storage.getSignedUrl('lease-documents', documentPath).pipe();
+      }),
+    ).subscribe({
+      next: (results) => {
+        const links: Record<string, string> = {};
+        results.forEach((result, index) => {
+          if (typeof result === 'string') {
+            links[leasesWithDocs[index].id] = result;
+          } else {
+            links[result.id] = result.url;
+          }
+        });
+        this.leaseDocumentLinks.set(links);
+      },
+      error: () => this.leaseDocumentLinks.set({}),
     });
   }
 
@@ -952,6 +1030,21 @@ export class PropertyDetailPage implements OnInit {
     this.showPropertyForm.set(true);
   }
 
+  addLease(): void {
+    this.editingLease.set(null);
+    this.showLeaseForm.set(true);
+  }
+
+  editLease(lease: Lease): void {
+    this.editingLease.set(lease);
+    this.showLeaseForm.set(true);
+  }
+
+  closeLeaseForm(): void {
+    this.showLeaseForm.set(false);
+    this.editingLease.set(null);
+  }
+
   openImagePreview(): void {
     if (this.coverPhotoUrl()) {
       this.showImagePreview.set(true);
@@ -977,8 +1070,18 @@ export class PropertyDetailPage implements OnInit {
   }
 
   onLeaseSaved(lease: Lease): void {
-    this.leases.update((prev) => [lease, ...prev]);
-    this.showLeaseForm.set(false);
+    this.leases.update((prev) => {
+      const idx = prev.findIndex((item) => item.id === lease.id);
+      if (idx >= 0) {
+        const updated = [...prev];
+        updated[idx] = lease;
+        return updated;
+      }
+
+      return [lease, ...prev];
+    });
+    this.loadLeaseDocumentLinks(this.leases());
+    this.closeLeaseForm();
   }
 
   onTenantSaved(tenant: Tenant): void {

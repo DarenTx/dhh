@@ -9,6 +9,7 @@ import {
 } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Lease, LeaseService, CreateLeaseData } from '../../../core/services/lease.service';
+import { StorageService } from '../../../core/services/storage.service';
 
 const STATUS_OPTIONS: { value: Lease['status']; label: string }[] = [
   { value: 'active', label: 'Active' },
@@ -66,9 +67,31 @@ const STATUS_OPTIONS: { value: Lease['status']; label: string }[] = [
       }
     }
 
+    input[type='file'] {
+      padding: 0.45rem;
+      border-style: dashed;
+    }
+
     .error {
       font-size: 0.8125rem;
       color: #e53e3e;
+    }
+
+    .field-hint {
+      font-size: 0.75rem;
+      color: #718096;
+      margin: 0;
+    }
+
+    .doc-link {
+      font-size: 0.8125rem;
+      color: #2b6cb0;
+      text-decoration: none;
+      width: fit-content;
+    }
+
+    .doc-link:hover {
+      text-decoration: underline;
     }
 
     .actions {
@@ -158,9 +181,23 @@ const STATUS_OPTIONS: { value: Lease['status']; label: string }[] = [
           </select>
         </div>
 
-        <div class="form-group">
-          <label for="doc">Document URL</label>
-          <input id="doc" type="url" formControlName="document_url" placeholder="https://…" />
+        <div class="form-group full-width">
+          <label for="doc-upload">Lease document</label>
+          <input
+            id="doc-upload"
+            type="file"
+            accept="application/pdf,image/png,image/jpeg,image/webp"
+            (change)="onDocumentSelected($event)"
+          />
+          <p class="field-hint">Upload a PDF or image file to store it in Supabase Storage.</p>
+          @if (selectedDocumentName()) {
+            <p class="field-hint">Selected file: {{ selectedDocumentName() }}</p>
+          }
+          @if (existingDocumentUrl()) {
+            <a class="doc-link" [href]="existingDocumentUrl()" target="_blank" rel="noopener">
+              View current lease document
+            </a>
+          }
         </div>
       </div>
 
@@ -186,9 +223,13 @@ export class LeaseFormComponent implements OnInit {
   readonly statusOptions = STATUS_OPTIONS;
   readonly saving = signal(false);
   readonly serverError = signal<string | null>(null);
+  readonly selectedDocumentName = signal<string | null>(null);
+  readonly existingDocumentUrl = signal<string | null>(null);
+  private selectedDocument: File | null = null;
 
   private readonly fb = inject(FormBuilder);
   private readonly leaseService = inject(LeaseService);
+  private readonly storage = inject(StorageService);
 
   readonly form = this.fb.group({
     start_date: ['', Validators.required],
@@ -210,7 +251,25 @@ export class LeaseFormComponent implements OnInit {
         status: l.status,
         document_url: l.document_url ?? '',
       });
+
+      if (l.document_url) {
+        if (/^https?:\/\//i.test(l.document_url)) {
+          this.existingDocumentUrl.set(l.document_url);
+        } else {
+          this.storage.getSignedUrl('lease-documents', l.document_url).subscribe({
+            next: (url) => this.existingDocumentUrl.set(url),
+            error: () => this.existingDocumentUrl.set(null),
+          });
+        }
+      }
     }
+  }
+
+  onDocumentSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0] ?? null;
+    this.selectedDocument = file;
+    this.selectedDocumentName.set(file?.name ?? null);
   }
 
   submit(): void {
@@ -232,19 +291,43 @@ export class LeaseFormComponent implements OnInit {
     this.serverError.set(null);
 
     const existing = this.lease();
-    const save$ = existing
-      ? this.leaseService.updateLease(existing.id, data)
-      : this.leaseService.createLease(data);
 
-    save$.subscribe({
-      next: (saved) => {
-        this.saving.set(false);
-        this.saved.emit(saved);
-      },
-      error: (err: Error) => {
-        this.saving.set(false);
-        this.serverError.set(err.message ?? 'An error occurred.');
-      },
-    });
+    const persistLease = (documentPath: string | null): void => {
+      const payload = { ...data, document_url: documentPath };
+      const save$ = existing
+        ? this.leaseService.updateLease(existing.id, payload)
+        : this.leaseService.createLease(payload);
+
+      save$.subscribe({
+        next: (saved) => {
+          this.saving.set(false);
+          this.saved.emit(saved);
+        },
+        error: (err: Error) => {
+          this.saving.set(false);
+          this.serverError.set(err.message ?? 'An error occurred.');
+        },
+      });
+    };
+
+    if (this.selectedDocument) {
+      this.storage
+        .uploadLeaseDocument(
+          this.propertyId(),
+          this.selectedDocument,
+          existing?.id,
+          existing?.document_url ?? null,
+        )
+        .subscribe({
+          next: (path) => persistLease(path),
+          error: (err: Error) => {
+            this.saving.set(false);
+            this.serverError.set(err.message ?? 'Failed to upload lease document.');
+          },
+        });
+      return;
+    }
+
+    persistLease(raw.document_url || null);
   }
 }

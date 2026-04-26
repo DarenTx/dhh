@@ -8,6 +8,40 @@ import { SUPABASE_CLIENT } from '../auth/supabase.provider';
 export class StorageService {
   private readonly supabase = inject<SupabaseClient>(SUPABASE_CLIENT);
 
+  uploadLeaseDocument(
+    propertyId: string,
+    file: File,
+    leaseId?: string,
+    existingPath?: string | null,
+  ): Observable<string> {
+    if (existingPath && !/^https?:\/\//i.test(existingPath)) {
+      return from(
+        this.supabase.storage
+          .from('lease-documents')
+          .upload(existingPath, file, { upsert: true })
+          .then(({ data, error }) => {
+            if (error) throw error;
+            return data!.path;
+          }),
+      );
+    }
+
+    const extension = file.name.includes('.') ? file.name.split('.').pop() : 'pdf';
+    const path = leaseId
+      ? `${propertyId}/${leaseId}/lease.${extension}`
+      : `${propertyId}/draft-${crypto.randomUUID()}.${extension}`;
+
+    return from(
+      this.supabase.storage
+        .from('lease-documents')
+        .upload(path, file, { upsert: !!leaseId })
+        .then(({ data, error }) => {
+          if (error) throw error;
+          return data!.path;
+        }),
+    );
+  }
+
   uploadPropertyCoverPhoto(propertyId: string, file: File): Observable<string> {
     const ext = file.name.split('.').pop();
     const path = `${propertyId}/cover.${ext}`;

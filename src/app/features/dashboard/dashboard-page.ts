@@ -289,26 +289,6 @@ interface DashboardStats {
       } @else {
         <div class="stats-grid">
           <a class="stat-card" routerLink="/properties">
-            <div class="stat-icon stat-icon-green">
-              <ng-icon name="heroCreditCard" size="20" />
-            </div>
-            <p class="stat-value">
-              {{ stats()!.totalMonthlyRent | currency: 'USD' : 'symbol' : '1.0-0' }}
-            </p>
-            <p class="stat-label">Total monthly rent</p>
-          </a>
-
-          <a class="stat-card" routerLink="/properties">
-            <div class="stat-icon stat-icon-blue">
-              <ng-icon name="heroBuildingOffice2" size="20" />
-            </div>
-            <p class="stat-value">
-              {{ stats()!.totalMarketValue | currency: 'USD' : 'symbol' : '1.0-0' }}
-            </p>
-            <p class="stat-label">Total market value</p>
-          </a>
-
-          <a class="stat-card" routerLink="/properties">
             <div class="stat-icon stat-icon-blue">
               <ng-icon name="heroBuildingOffice2" size="20" />
             </div>
@@ -330,6 +310,26 @@ interface DashboardStats {
             </div>
             <p class="stat-value">{{ stats()!.vacantProperties }}</p>
             <p class="stat-label">Vacant</p>
+          </a>
+
+          <a class="stat-card" routerLink="/properties">
+            <div class="stat-icon stat-icon-blue">
+              <ng-icon name="heroBuildingOffice2" size="20" />
+            </div>
+            <p class="stat-value">
+              {{ stats()!.totalMarketValue | currency: 'USD' : 'symbol' : '1.0-0' }}
+            </p>
+            <p class="stat-label">Total market value</p>
+          </a>
+
+          <a class="stat-card" routerLink="/properties">
+            <div class="stat-icon stat-icon-green">
+              <ng-icon name="heroCreditCard" size="20" />
+            </div>
+            <p class="stat-value">
+              {{ stats()!.totalMonthlyRent | currency: 'USD' : 'symbol' : '1.0-0' }}
+            </p>
+            <p class="stat-label">Total monthly rent</p>
           </a>
         </div>
       }
