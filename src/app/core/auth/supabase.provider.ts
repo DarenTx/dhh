@@ -13,6 +13,7 @@ export function provideSupabase() {
           auth: {
             flowType: 'pkce',
             storage: localStorage,
+            detectSessionInUrl: false,
           },
         }),
     },
