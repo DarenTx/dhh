@@ -19,9 +19,22 @@ body {
     BlinkMacSystemFont,
     'Segoe UI',
     sans-serif;
-  background: #f0f4f8;
+  background: #fdf9f3;
   color: #1a202c;
   line-height: 1.6;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url('/dahl-heritage-homes.png');
+  background-repeat: no-repeat;
+  background-size: 40%;
+  background-position: center center;
+  opacity: 0.06;
+  pointer-events: none;
+  z-index: -1;
 }
 
 h1,

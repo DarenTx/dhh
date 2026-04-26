@@ -34,6 +34,21 @@ export type UpdateLeaseData = Partial<
 export class LeaseService {
   private readonly supabase = inject<SupabaseClient>(SUPABASE_CLIENT);
 
+  getActiveLeases(): Observable<Lease[]> {
+    return from(
+      this.supabase
+        .from('leases')
+        .select('*')
+        .eq('is_active', true)
+        .eq('status', 'active')
+        .order('start_date', { ascending: false })
+        .then(({ data, error }) => {
+          if (error) throw error;
+          return (data ?? []) as Lease[];
+        }),
+    );
+  }
+
   getLeasesForProperty(propertyId: string): Observable<Lease[]> {
     return from(
       this.supabase

@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
-import { DecimalPipe } from '@angular/common';
+import { CurrencyPipe, DecimalPipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { NgIconComponent } from '@ng-icons/core';
 import { PropertyWithOccupancy } from '../../../core/services/property.service';
@@ -7,7 +7,7 @@ import { PropertyWithOccupancy } from '../../../core/services/property.service';
 @Component({
   selector: 'app-property-card',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, NgIconComponent, DecimalPipe],
+  imports: [RouterLink, NgIconComponent, DecimalPipe, CurrencyPipe],
   styles: `
     .card {
       background: #fff;
@@ -96,6 +96,13 @@ import { PropertyWithOccupancy } from '../../../core/services/property.service';
       color: #718096;
       margin: 0;
     }
+
+    .market-value {
+      font-size: 0.8125rem;
+      color: #2b6cb0;
+      font-weight: 600;
+      margin: 0;
+    }
   `,
   template: `
     <a class="card" [routerLink]="['/properties', property().id]">
@@ -130,6 +137,12 @@ import { PropertyWithOccupancy } from '../../../core/services/property.service';
             @if (property().square_footage) {
               · {{ property().square_footage | number }} sq ft
             }
+          </p>
+        }
+
+        @if (property().latestMarketValue) {
+          <p class="market-value">
+            Est. value: {{ property().latestMarketValue!.market_value | currency }}
           </p>
         }
       </div>

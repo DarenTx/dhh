@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from '@angular/core';
+import { ActivatedRoute } from '@angular/router';
 import { Title } from '@angular/platform-browser';
 import { NgIconComponent } from '@ng-icons/core';
 import { PropertyCardComponent } from './property-card/property-card.component';
@@ -9,6 +10,7 @@ import {
   PropertyService,
 } from '../../core/services/property.service';
 import { RoleService } from '../../core/role/role.service';
+import { StorageService } from '../../core/services/storage.service';
 
 @Component({
   selector: 'app-properties-page',
@@ -152,6 +154,13 @@ import { RoleService } from '../../core/role/role.service';
       </button>
       <button
         class="filter-btn"
+        [class.active]="filter() === 'occupied'"
+        (click)="filter.set('occupied')"
+      >
+        Occupied
+      </button>
+      <button
+        class="filter-btn"
         [class.active]="filter() === 'vacant'"
         (click)="filter.set('vacant')"
       >
@@ -166,7 +175,7 @@ import { RoleService } from '../../core/role/role.service';
         <p class="empty-state">No properties found.</p>
       } @else {
         @for (p of visible(); track p.id) {
-          <app-property-card [property]="p" />
+          <app-property-card [property]="p" [signedPhotoUrl]="signedUrls()[p.id] || null" />
         }
       }
     </div>
@@ -187,12 +196,15 @@ import { RoleService } from '../../core/role/role.service';
 })
 export class PropertiesPage implements OnInit {
   private readonly propertyService = inject(PropertyService);
+  private readonly storageService = inject(StorageService);
   private readonly roles = inject(RoleService);
   private readonly title = inject(Title);
+  private readonly route = inject(ActivatedRoute);
 
   readonly loading = signal(true);
-  readonly filter = signal<'all' | 'vacant'>('all');
+  readonly filter = signal<'all' | 'occupied' | 'vacant'>('all');
   readonly allProperties = signal<PropertyWithOccupancy[]>([]);
+  readonly signedUrls = signal<Record<string, string>>({});
   readonly showForm = signal(false);
   readonly pendingId = signal<string | null>(null);
 
@@ -203,11 +215,17 @@ export class PropertiesPage implements OnInit {
   visible(): PropertyWithOccupancy[] {
     const f = this.filter();
     const all = this.allProperties();
-    return f === 'vacant' ? all.filter((p) => !p.isOccupied) : all;
+    if (f === 'occupied') return all.filter((p) => p.isOccupied);
+    if (f === 'vacant') return all.filter((p) => !p.isOccupied);
+    return all;
   }
 
   ngOnInit(): void {
     this.title.setTitle('Properties – DHH');
+    const filterParam = this.route.snapshot.queryParamMap.get('filter');
+    if (filterParam === 'occupied' || filterParam === 'vacant') {
+      this.filter.set(filterParam);
+    }
     this.load();
   }
 
@@ -217,6 +235,15 @@ export class PropertiesPage implements OnInit {
       next: (props) => {
         this.allProperties.set(props);
         this.loading.set(false);
+        props
+          .filter((p) => p.cover_photo_url)
+          .forEach((p) => {
+            this.storageService
+              .getSignedUrl('property-photos', p.cover_photo_url!)
+              .subscribe((url) => {
+                this.signedUrls.update((prev) => ({ ...prev, [p.id]: url }));
+              });
+          });
       },
       error: () => this.loading.set(false),
     });
@@ -235,7 +262,7 @@ export class PropertiesPage implements OnInit {
   onSaved(property: Property): void {
     this.allProperties.update((prev) => {
       const idx = prev.findIndex((p) => p.id === property.id);
-      const withOccupancy = { ...property, isOccupied: false };
+      const withOccupancy = { ...property, isOccupied: false, latestMarketValue: null };
       if (idx >= 0) {
         const updated = [...prev];
         updated[idx] = { ...prev[idx], ...property };

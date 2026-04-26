@@ -3,11 +3,11 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import { forkJoin, from, Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { SUPABASE_CLIENT } from '../auth/supabase.provider';
+import { PropertyMarketValue } from './property-market-value.service';
 
 export interface Property {
   id: string;
   address_line1: string;
-  address_line2: string | null;
   city: string | null;
   state: string | null;
   zip: string | null;
@@ -24,12 +24,12 @@ export interface Property {
 
 export interface PropertyWithOccupancy extends Property {
   isOccupied: boolean;
+  latestMarketValue: PropertyMarketValue | null;
 }
 
 export type CreatePropertyData = Pick<
   Property,
   | 'address_line1'
-  | 'address_line2'
   | 'city'
   | 'state'
   | 'zip'
@@ -71,9 +71,28 @@ export class PropertyService {
         }),
     );
 
-    return forkJoin([properties$, occupiedIds$]).pipe(
-      map(([properties, occupied]) =>
-        properties.map((p) => ({ ...p, isOccupied: occupied.has(p.id) })),
+    const latestValues$ = from(
+      this.supabase
+        .from('property_market_values')
+        .select('*')
+        .order('value_date', { ascending: false })
+        .then(({ data, error }) => {
+          if (error) throw error;
+          const map = new Map<string, PropertyMarketValue>();
+          for (const row of (data ?? []) as PropertyMarketValue[]) {
+            if (!map.has(row.property_id)) map.set(row.property_id, row);
+          }
+          return map;
+        }),
+    );
+
+    return forkJoin([properties$, occupiedIds$, latestValues$]).pipe(
+      map(([properties, occupied, latestMap]) =>
+        properties.map((p) => ({
+          ...p,
+          isOccupied: occupied.has(p.id),
+          latestMarketValue: latestMap.get(p.id) ?? null,
+        })),
       ),
     );
   }
@@ -105,8 +124,25 @@ export class PropertyService {
         }),
     );
 
-    return forkJoin([property$, occupied$]).pipe(
-      map(([property, isOccupied]) => ({ ...property, isOccupied })),
+    const latestValue$ = from(
+      this.supabase
+        .from('property_market_values')
+        .select('*')
+        .eq('property_id', id)
+        .order('value_date', { ascending: false })
+        .limit(1)
+        .then(({ data, error }) => {
+          if (error) throw error;
+          return (data ?? []).length > 0 ? (data![0] as PropertyMarketValue) : null;
+        }),
+    );
+
+    return forkJoin([property$, occupied$, latestValue$]).pipe(
+      map(([property, isOccupied, latestMarketValue]) => ({
+        ...property,
+        isOccupied,
+        latestMarketValue,
+      })),
     );
   }
 

@@ -1,4 +1,11 @@
-import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  inject,
+  OnInit,
+  signal,
+} from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { Title } from '@angular/platform-browser';
 import { DecimalPipe, CurrencyPipe, DatePipe, TitleCasePipe } from '@angular/common';
@@ -17,8 +24,14 @@ import { PropertyFormComponent } from '../property-form/property-form.component'
 import { LeaseFormComponent } from '../lease-form/lease-form.component';
 import { TenantFormComponent } from '../tenant-form/tenant-form.component';
 import { NewTenancyWizardComponent } from '../new-tenancy-wizard/new-tenancy-wizard.component';
+import { MarketValueFormComponent } from '../market-value-form/market-value-form.component';
+import {
+  PropertyMarketValue,
+  PropertyMarketValueService,
+} from '../../../core/services/property-market-value.service';
+import { StorageService } from '../../../core/services/storage.service';
 
-type TabId = 'overview' | 'leases' | 'tenants' | 'notes' | 'expenses';
+type TabId = 'overview' | 'leases' | 'tenants' | 'notes' | 'expenses' | 'market-values';
 
 const TABS: { id: TabId; label: string; managerOnly?: boolean }[] = [
   { id: 'overview', label: 'Overview' },
@@ -26,6 +39,7 @@ const TABS: { id: TabId; label: string; managerOnly?: boolean }[] = [
   { id: 'tenants', label: 'Tenants' },
   { id: 'notes', label: 'Notes' },
   { id: 'expenses', label: 'Expenses', managerOnly: true },
+  { id: 'market-values', label: 'Market Values' },
 ];
 
 @Component({
@@ -43,6 +57,7 @@ const TABS: { id: TabId; label: string; managerOnly?: boolean }[] = [
     LeaseFormComponent,
     TenantFormComponent,
     NewTenancyWizardComponent,
+    MarketValueFormComponent,
   ],
   styles: `
     .breadcrumb {
@@ -71,6 +86,60 @@ const TABS: { id: TabId; label: string; managerOnly?: boolean }[] = [
       flex-wrap: wrap;
     }
 
+    .header-main {
+      display: flex;
+      align-items: flex-start;
+      gap: 1rem;
+      min-width: 0;
+      flex: 1;
+    }
+
+    .header-photo {
+      width: 132px;
+      height: 96px;
+      object-fit: cover;
+      border-radius: 0.875rem;
+      border: 1px solid #e2e8f0;
+      background: #edf2f7;
+      display: block;
+      flex-shrink: 0;
+    }
+
+    .header-photo-button {
+      padding: 0;
+      border: none;
+      background: none;
+      cursor: zoom-in;
+      border-radius: 0.875rem;
+      flex-shrink: 0;
+    }
+
+    .header-photo-button:focus-visible {
+      outline: 2px solid #2b6cb0;
+      outline-offset: 3px;
+    }
+
+    .header-photo-button:hover .header-photo {
+      box-shadow: 0 6px 18px rgb(0 0 0 / 0.14);
+    }
+
+    .header-photo-placeholder {
+      width: 132px;
+      height: 96px;
+      border-radius: 0.875rem;
+      border: 1px solid #e2e8f0;
+      background: linear-gradient(135deg, #f7fafc, #edf2f7);
+      color: #a0aec0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .header-copy {
+      min-width: 0;
+    }
+
     h1 {
       margin: 0;
       font-size: 1.375rem;
@@ -81,6 +150,38 @@ const TABS: { id: TabId; label: string; managerOnly?: boolean }[] = [
     .sub {
       margin: 0;
       font-size: 0.9375rem;
+      color: #718096;
+    }
+
+    .overview-summary {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 1rem;
+      padding: 1rem;
+      display: grid;
+      gap: 0.875rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .hero-stat-label {
+      margin: 0 0 0.25rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #718096;
+    }
+
+    .hero-stat-value {
+      margin: 0;
+      font-size: 1.125rem;
+      font-weight: 700;
+      color: #2d3748;
+    }
+
+    .hero-stat-meta {
+      margin: 0.2rem 0 0;
+      font-size: 0.8125rem;
       color: #718096;
     }
 
@@ -108,6 +209,13 @@ const TABS: { id: TabId; label: string; managerOnly?: boolean }[] = [
       padding: 0 1.5rem;
       margin-top: 1rem;
       overflow-x: auto;
+      overflow-y: hidden;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }
+
+    .tab-bar::-webkit-scrollbar {
+      display: none;
     }
 
     .tab-btn {
@@ -248,6 +356,81 @@ const TABS: { id: TabId; label: string; managerOnly?: boolean }[] = [
       font-weight: 700;
       color: #2d3748;
     }
+
+    .image-preview-modal {
+      background: rgb(17 24 39 / 0.94);
+      border-radius: 1rem;
+      padding: 1rem;
+      width: min(96vw, 1080px);
+      max-height: 90vh;
+      display: grid;
+      gap: 0.75rem;
+    }
+
+    .image-preview-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      color: #fff;
+    }
+
+    .image-preview-title {
+      margin: 0;
+      font-size: 0.9375rem;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    .image-preview-close {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 2.5rem;
+      height: 2.5rem;
+      border-radius: 9999px;
+      border: 1px solid rgb(255 255 255 / 0.18);
+      background: rgb(255 255 255 / 0.08);
+      color: #fff;
+      cursor: pointer;
+    }
+
+    .image-preview-close:hover {
+      background: rgb(255 255 255 / 0.14);
+    }
+
+    .image-preview-body {
+      overflow: auto;
+      display: flex;
+      justify-content: center;
+    }
+
+    .image-preview-photo {
+      max-width: 100%;
+      max-height: calc(90vh - 92px);
+      object-fit: contain;
+      border-radius: 0.75rem;
+      background: #111827;
+    }
+
+    @media (max-width: 820px) {
+      .header-main {
+        width: 100%;
+      }
+    }
+
+    @media (max-width: 560px) {
+      .header-main {
+        flex-direction: column;
+      }
+
+      .header-photo,
+      .header-photo-placeholder {
+        width: 100%;
+        height: auto;
+        aspect-ratio: 16 / 9;
+      }
+    }
   `,
   template: `
     <nav class="breadcrumb">
@@ -262,16 +445,39 @@ const TABS: { id: TabId; label: string; managerOnly?: boolean }[] = [
       <p style="padding: 2rem 1.5rem; color: #e53e3e;">Property not found.</p>
     } @else {
       <div class="header">
-        <div>
-          <h1>{{ property()!.address_line1 }}</h1>
-          <p class="sub">{{ property()!.city }}, {{ property()!.state }} {{ property()!.zip }}</p>
+        <div class="header-main">
+          @if (coverPhotoUrl()) {
+            <button
+              type="button"
+              class="header-photo-button"
+              (click)="openImagePreview()"
+              [attr.aria-label]="'Open larger image for ' + property()!.address_line1"
+            >
+              <img
+                class="header-photo"
+                [src]="coverPhotoUrl()!"
+                [alt]="property()!.address_line1"
+              />
+            </button>
+          } @else {
+            <div class="header-photo-placeholder">
+              <ng-icon name="heroBuildingOffice2" size="40" />
+            </div>
+          }
+
+          <div class="header-copy">
+            <h1>{{ property()!.address_line1 }}</h1>
+            <p class="sub">{{ property()!.city }}, {{ property()!.state }} {{ property()!.zip }}</p>
+            <div style="margin-top:0.5rem;display:flex;align-items:center;gap:0.5rem;">
+              @if (property()!.isOccupied) {
+                <span class="badge badge-occupied">Occupied</span>
+              } @else {
+                <span class="badge badge-vacant">Vacant</span>
+              }
+            </div>
+          </div>
         </div>
         <div style="display:flex;gap:0.5rem;align-items:center;">
-          @if (property()!.isOccupied) {
-            <span class="badge badge-occupied">Occupied</span>
-          } @else {
-            <span class="badge badge-vacant">Vacant</span>
-          }
           @if (canManage()) {
             <button class="btn-primary" (click)="editProperty()">
               <ng-icon name="heroPencilSquare" size="16" />
@@ -298,38 +504,43 @@ const TABS: { id: TabId; label: string; managerOnly?: boolean }[] = [
       <div class="tab-content">
         @switch (activeTab()) {
           @case ('overview') {
-            <div class="overview-grid">
+            <section class="overview-summary">
+              <div>
+                <p class="hero-stat-label">Latest market value</p>
+                <p class="hero-stat-value">
+                  @if (property()!.latestMarketValue) {
+                    {{ property()!.latestMarketValue!.market_value | currency:'USD':'symbol':'1.0-0' }}
+                  } @else {
+                    No estimate yet
+                  }
+                </p>
+                @if (property()!.latestMarketValue) {
+                  <p class="hero-stat-meta">
+                    {{ property()!.latestMarketValue!.source | titlecase }} on
+                    {{ property()!.latestMarketValue!.value_date | date: 'mediumDate' }}
+                  </p>
+                }
+              </div>
+
+              <div>
+                <p class="hero-stat-label">Property profile</p>
+                <p class="hero-stat-value">
+                  {{ property()!.bedrooms ?? '—' }} bd · {{ property()!.bathrooms ?? '—' }} ba ·
+                  @if (property()!.square_footage) {
+                    {{ property()!.square_footage | number }} sq ft
+                  } @else {
+                    — sq ft
+                  }
+                </p>
+              </div>
+
               @if (property()!.year_built) {
                 <div>
-                  <p class="detail-label">Year built</p>
-                  <p class="detail-value">{{ property()!.year_built }}</p>
+                  <p class="hero-stat-label">Year built</p>
+                  <p class="hero-stat-value">{{ property()!.year_built }}</p>
                 </div>
               }
-              @if (property()!.square_footage) {
-                <div>
-                  <p class="detail-label">Square footage</p>
-                  <p class="detail-value">{{ property()!.square_footage | number }} sq ft</p>
-                </div>
-              }
-              @if (property()!.bedrooms) {
-                <div>
-                  <p class="detail-label">Bedrooms</p>
-                  <p class="detail-value">{{ property()!.bedrooms }}</p>
-                </div>
-              }
-              @if (property()!.bathrooms) {
-                <div>
-                  <p class="detail-label">Bathrooms</p>
-                  <p class="detail-value">{{ property()!.bathrooms }}</p>
-                </div>
-              }
-              @if (property()!.address_line2) {
-                <div style="grid-column: 1 / -1">
-                  <p class="detail-label">Unit</p>
-                  <p class="detail-value">{{ property()!.address_line2 }}</p>
-                </div>
-              }
-            </div>
+            </section>
 
             @if (!property()!.isOccupied && canManage()) {
               <div style="margin-top: 1.5rem;">
@@ -414,15 +625,21 @@ const TABS: { id: TabId; label: string; managerOnly?: boolean }[] = [
               <p class="loading">Loading expenses…</p>
             } @else {
               <div style="margin-bottom:1rem">
-                <p style="margin:0 0 0.25rem;font-size:0.8125rem;color:#a0aec0">YTD total ({{ currentYear }})</p>
-                <p style="margin:0;font-size:1.5rem;font-weight:700;color:#2d3748">{{ ytdTotal() | currency }}</p>
+                <p style="margin:0 0 0.25rem;font-size:0.8125rem;color:#a0aec0">
+                  YTD total ({{ currentYear }})
+                </p>
+                <p style="margin:0;font-size:1.5rem;font-weight:700;color:#2d3748">
+                  {{ ytdTotal() | currency }}
+                </p>
               </div>
 
               @if (topCategories().length > 0) {
                 <div style="margin-bottom:1rem">
                   <p style="margin:0 0 0.5rem;font-size:0.8125rem;color:#a0aec0">Top categories</p>
                   @for (cat of topCategories(); track cat.name) {
-                    <div style="display:flex;justify-content:space-between;padding:0.375rem 0;border-bottom:1px solid #f7fafc;font-size:0.9375rem">
+                    <div
+                      style="display:flex;justify-content:space-between;padding:0.375rem 0;border-bottom:1px solid #f7fafc;font-size:0.9375rem"
+                    >
                       <span style="color:#4a5568">{{ cat.name }}</span>
                       <span style="font-weight:600;color:#2d3748">{{ cat.total | currency }}</span>
                     </div>
@@ -440,6 +657,53 @@ const TABS: { id: TabId; label: string; managerOnly?: boolean }[] = [
                 <ng-icon name="heroCreditCard" size="14" />
                 View all expenses
               </a>
+            }
+          }
+
+          @case ('market-values') {
+            @if (canManage()) {
+              <div class="action-bar">
+                <button class="btn-primary" (click)="addMarketValue()">
+                  <ng-icon name="heroPlus" size="16" />
+                  Add value
+                </button>
+              </div>
+            }
+            @if (marketValuesLoading()) {
+              <p class="loading">Loading market values…</p>
+            } @else if (marketValues().length === 0) {
+              <p class="empty">No market values on record.</p>
+            } @else {
+              @for (mv of marketValues(); track mv.id) {
+                <div
+                  class="lease-card"
+                  style="display:flex;align-items:center;justify-content:space-between;gap:1rem;"
+                >
+                  <div>
+                    <p style="margin:0;font-size:1rem;font-weight:600;color:#2d3748">
+                      {{ mv.market_value | currency:'USD':'symbol':'1.0-0' }}
+                    </p>
+                    <p style="margin:0;font-size:0.875rem;color:#718096">
+                      {{ mv.source | titlecase }} · {{ mv.value_date | date: 'mediumDate' }}
+                    </p>
+                    @if (mv.notes) {
+                      <p style="margin:0.25rem 0 0;font-size:0.8125rem;color:#a0aec0">
+                        {{ mv.notes }}
+                      </p>
+                    }
+                  </div>
+                  @if (canManage()) {
+                    <button
+                      class="btn-primary"
+                      style="padding:0.375rem 0.75rem;font-size:0.8125rem;flex-shrink:0"
+                      (click)="editMarketValue(mv)"
+                    >
+                      <ng-icon name="heroPencilSquare" size="14" />
+                      Edit
+                    </button>
+                  }
+                </div>
+              }
             }
           }
         }
@@ -500,6 +764,47 @@ const TABS: { id: TabId; label: string; managerOnly?: boolean }[] = [
         </div>
       </div>
     }
+
+    <!-- Market value form modal -->
+    @if (showMarketValueForm()) {
+      <div class="modal-backdrop" (click)="showMarketValueForm.set(false)">
+        <div class="modal" (click)="$event.stopPropagation()">
+          <h2>{{ editingMarketValue() ? 'Edit market value' : 'Add market value' }}</h2>
+          <app-market-value-form
+            [propertyId]="property()!.id"
+            [marketValue]="editingMarketValue()"
+            (saved)="onMarketValueSaved($event)"
+            (cancelled)="showMarketValueForm.set(false)"
+          />
+        </div>
+      </div>
+    }
+
+    @if (showImagePreview() && coverPhotoUrl()) {
+      <div class="modal-backdrop" (click)="closeImagePreview()">
+        <div class="image-preview-modal" (click)="$event.stopPropagation()">
+          <div class="image-preview-header">
+            <p class="image-preview-title">{{ property()!.address_line1 }}</p>
+            <button
+              type="button"
+              class="image-preview-close"
+              (click)="closeImagePreview()"
+              aria-label="Close image preview"
+            >
+              <ng-icon name="heroXMark" size="18" />
+            </button>
+          </div>
+
+          <div class="image-preview-body">
+            <img
+              class="image-preview-photo"
+              [src]="coverPhotoUrl()!"
+              [alt]="property()!.address_line1"
+            />
+          </div>
+        </div>
+      </div>
+    }
   `,
 })
 export class PropertyDetailPage implements OnInit {
@@ -508,6 +813,8 @@ export class PropertyDetailPage implements OnInit {
   private readonly leaseService = inject(LeaseService);
   private readonly tenantService = inject(TenantService);
   private readonly expenseService = inject(ExpenseService);
+  private readonly marketValueService = inject(PropertyMarketValueService);
+  private readonly storage = inject(StorageService);
   private readonly roles = inject(RoleService);
   private readonly title = inject(Title);
 
@@ -526,6 +833,7 @@ export class PropertyDetailPage implements OnInit {
   readonly propertyExpenses = signal<ExpenseWithCategory[]>([]);
   readonly expensesLoading = signal(false);
   readonly currentYear = new Date().getFullYear();
+  readonly coverPhotoUrl = signal<string | null>(null);
 
   readonly ytdTotal = computed(() =>
     this.propertyExpenses()
@@ -549,6 +857,12 @@ export class PropertyDetailPage implements OnInit {
   readonly showLeaseForm = signal(false);
   readonly showTenantForm = signal(false);
   readonly showWizard = signal(false);
+  readonly showMarketValueForm = signal(false);
+  readonly showImagePreview = signal(false);
+  readonly editingMarketValue = signal<PropertyMarketValue | null>(null);
+
+  readonly marketValues = signal<PropertyMarketValue[]>([]);
+  readonly marketValuesLoading = signal(false);
 
   canManage(): boolean {
     return this.roles.isManagerOrAbove();
@@ -566,6 +880,7 @@ export class PropertyDetailPage implements OnInit {
     this.loadProperty(id);
     this.loadLeases(id);
     this.loadTenants(id);
+    this.loadMarketValues(id);
     if (this.canManage()) {
       this.loadExpenses(id);
     }
@@ -577,9 +892,22 @@ export class PropertyDetailPage implements OnInit {
       next: (p) => {
         this.property.set(p);
         this.title.setTitle(`${p.address_line1} – DHH`);
+        this.loadCoverPhoto(p.cover_photo_url);
         this.loading.set(false);
       },
       error: () => this.loading.set(false),
+    });
+  }
+
+  private loadCoverPhoto(path: string | null): void {
+    if (!path) {
+      this.coverPhotoUrl.set(null);
+      return;
+    }
+
+    this.storage.getSignedUrl('property-photos', path).subscribe({
+      next: (url) => this.coverPhotoUrl.set(url),
+      error: () => this.coverPhotoUrl.set(null),
     });
   }
 
@@ -621,12 +949,27 @@ export class PropertyDetailPage implements OnInit {
     this.showPropertyForm.set(true);
   }
 
+  openImagePreview(): void {
+    if (this.coverPhotoUrl()) {
+      this.showImagePreview.set(true);
+    }
+  }
+
+  closeImagePreview(): void {
+    this.showImagePreview.set(false);
+  }
+
   startNewTenancy(): void {
     this.showWizard.set(true);
   }
 
   onPropertySaved(p: Property): void {
-    this.property.set({ ...p, isOccupied: this.property()?.isOccupied ?? false });
+    this.property.set({
+      ...p,
+      isOccupied: this.property()?.isOccupied ?? false,
+      latestMarketValue: this.property()?.latestMarketValue ?? null,
+    });
+    this.loadCoverPhoto(p.cover_photo_url);
     this.showPropertyForm.set(false);
   }
 
@@ -657,5 +1000,46 @@ export class PropertyDetailPage implements OnInit {
       },
       error: () => this.expensesLoading.set(false),
     });
+  }
+
+  private loadMarketValues(propertyId: string): void {
+    this.marketValuesLoading.set(true);
+    this.marketValueService.getForProperty(propertyId).subscribe({
+      next: (values) => {
+        this.marketValues.set(values);
+        this.marketValuesLoading.set(false);
+      },
+      error: () => this.marketValuesLoading.set(false),
+    });
+  }
+
+  addMarketValue(): void {
+    this.editingMarketValue.set(null);
+    this.showMarketValueForm.set(true);
+  }
+
+  editMarketValue(mv: PropertyMarketValue): void {
+    this.editingMarketValue.set(mv);
+    this.showMarketValueForm.set(true);
+  }
+
+  onMarketValueSaved(mv: PropertyMarketValue): void {
+    const existing = this.marketValues();
+    const idx = existing.findIndex((v) => v.id === mv.id);
+    if (idx >= 0) {
+      const updated = [...existing];
+      updated[idx] = mv;
+      this.marketValues.set(updated.sort((a, b) => b.value_date.localeCompare(a.value_date)));
+    } else {
+      this.marketValues.update((prev) =>
+        [mv, ...prev].sort((a, b) => b.value_date.localeCompare(a.value_date)),
+      );
+    }
+    // Update the latestMarketValue on the property signal
+    const sorted = this.marketValues();
+    if (sorted.length > 0) {
+      this.property.update((p) => (p ? { ...p, latestMarketValue: sorted[0] } : p));
+    }
+    this.showMarketValueForm.set(false);
   }
 }

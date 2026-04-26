@@ -140,11 +140,6 @@ const BATHROOM_OPTIONS = ['1', '1.5', '2', '2.5', '3'];
           }
         </div>
 
-        <div class="form-group full-width">
-          <label for="addr2">Apartment / unit</label>
-          <input id="addr2" formControlName="address_line2" autocomplete="address-line2" />
-        </div>
-
         <div class="form-group">
           <label for="city">City</label>
           <input id="city" formControlName="city" autocomplete="address-level2" />
@@ -235,7 +230,6 @@ export class PropertyFormComponent implements OnInit {
 
   readonly form = this.fb.group({
     address_line1: ['', Validators.required],
-    address_line2: [''],
     city: [''],
     state: ['OK'],
     zip: [''],
@@ -251,7 +245,6 @@ export class PropertyFormComponent implements OnInit {
     if (p) {
       this.form.patchValue({
         address_line1: p.address_line1,
-        address_line2: p.address_line2 ?? '',
         city: p.city ?? '',
         state: p.state ?? 'OK',
         zip: p.zip ?? '',
@@ -289,7 +282,6 @@ export class PropertyFormComponent implements OnInit {
     const rawValue = this.form.getRawValue();
     const data: CreatePropertyData = {
       address_line1: rawValue.address_line1!,
-      address_line2: rawValue.address_line2 || null,
       city: rawValue.city || null,
       state: rawValue.state || 'OK',
       zip: rawValue.zip || null,
