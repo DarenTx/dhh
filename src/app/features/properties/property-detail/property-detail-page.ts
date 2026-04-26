@@ -509,7 +509,10 @@ const TABS: { id: TabId; label: string; managerOnly?: boolean }[] = [
                 <p class="hero-stat-label">Latest market value</p>
                 <p class="hero-stat-value">
                   @if (property()!.latestMarketValue) {
-                    {{ property()!.latestMarketValue!.market_value | currency:'USD':'symbol':'1.0-0' }}
+                    {{
+                      property()!.latestMarketValue!.market_value
+                        | currency: 'USD' : 'symbol' : '1.0-0'
+                    }}
                   } @else {
                     No estimate yet
                   }
@@ -681,7 +684,7 @@ const TABS: { id: TabId; label: string; managerOnly?: boolean }[] = [
                 >
                   <div>
                     <p style="margin:0;font-size:1rem;font-weight:600;color:#2d3748">
-                      {{ mv.market_value | currency:'USD':'symbol':'1.0-0' }}
+                      {{ mv.market_value | currency: 'USD' : 'symbol' : '1.0-0' }}
                     </p>
                     <p style="margin:0;font-size:0.875rem;color:#718096">
                       {{ mv.source | titlecase }} · {{ mv.value_date | date: 'mediumDate' }}
