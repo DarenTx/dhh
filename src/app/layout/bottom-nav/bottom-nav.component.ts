@@ -1,10 +1,4 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  HostListener,
-  inject,
-  signal,
-} from '@angular/core';
+import { ChangeDetectionStrategy, Component, HostListener, inject, signal } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 import { NgIconComponent } from '@ng-icons/core';
 import { toSignal } from '@angular/core/rxjs-interop';
@@ -13,6 +7,7 @@ import { catchError } from 'rxjs/operators';
 import { RoleService } from '../../core/role/role.service';
 import { NAV_ITEMS, NavItem } from '../nav-config';
 import { ApprovalService } from '../../core/services/approval.service';
+import { AuthenticationService } from '../../core/auth/authentication.service';
 
 @Component({
   selector: 'app-bottom-nav',
@@ -115,6 +110,31 @@ import { ApprovalService } from '../../core/services/approval.service';
       color: #2b6cb0;
     }
 
+    .overflow-divider {
+      height: 1px;
+      background: #e2e8f0;
+      margin: 0.25rem 0;
+    }
+
+    .overflow-sign-out {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.75rem 1.25rem;
+      color: #c53030;
+      font-size: 0.9375rem;
+      font-weight: 500;
+      background: none;
+      border: none;
+      cursor: pointer;
+      width: 100%;
+      transition: background 0.12s;
+
+      &:hover {
+        background: #fff5f5;
+      }
+    }
+
     .icon-wrap {
       position: relative;
       display: inline-flex;
@@ -186,6 +206,11 @@ import { ApprovalService } from '../../core/services/approval.service';
               {{ item.label }}
             </a>
           }
+          <div class="overflow-divider"></div>
+          <button class="overflow-sign-out" role="menuitem" (click)="signOut()">
+            <ng-icon name="heroArrowRightOnRectangle" size="20" />
+            Sign Out
+          </button>
         </div>
       }
     }
@@ -194,6 +219,7 @@ import { ApprovalService } from '../../core/services/approval.service';
 export class BottomNavComponent {
   private readonly roles = inject(RoleService);
   private readonly approvalService = inject(ApprovalService);
+  private readonly auth = inject(AuthenticationService);
 
   readonly menuOpen = signal(false);
 
@@ -208,6 +234,11 @@ export class BottomNavComponent {
 
   overflowItems(): NavItem[] {
     return NAV_ITEMS.filter((item) => !item.bottomNav && this.isVisible(item));
+  }
+
+  signOut(): void {
+    this.menuOpen.set(false);
+    this.auth.signOut();
   }
 
   toggleMenu(event: Event): void {
@@ -227,4 +258,3 @@ export class BottomNavComponent {
     return false;
   }
 }
-

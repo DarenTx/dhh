@@ -7,6 +7,7 @@ import { catchError } from 'rxjs/operators';
 import { RoleService } from '../../core/role/role.service';
 import { NAV_ITEMS, NavItem } from '../nav-config';
 import { ApprovalService } from '../../core/services/approval.service';
+import { AuthenticationService } from '../../core/auth/authentication.service';
 
 @Component({
   selector: 'app-sidebar',
@@ -33,8 +34,8 @@ import { ApprovalService } from '../../core/services/approval.service';
     }
 
     .nav-brand img {
-      width: 120px;
-      height: 120px;
+      width: 160px;
+      height: 160px;
       object-fit: contain;
     }
 
@@ -95,6 +96,35 @@ import { ApprovalService } from '../../core/services/approval.service';
       align-items: center;
       justify-content: center;
     }
+
+    .nav-footer {
+      padding: 0.75rem;
+      border-top: 1px solid #e2e8f0;
+      margin-top: 0.75rem;
+    }
+
+    .sign-out-btn {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.625rem 0.75rem;
+      border-radius: 0.5rem;
+      color: #4a5568;
+      font-size: 0.9375rem;
+      font-weight: 500;
+      background: none;
+      border: none;
+      cursor: pointer;
+      width: 100%;
+      transition:
+        background 0.15s,
+        color 0.15s;
+
+      &:hover {
+        background: #fff5f5;
+        color: #c53030;
+      }
+    }
   `,
   template: `
     <div class="nav-brand">
@@ -117,11 +147,18 @@ import { ApprovalService } from '../../core/services/approval.service';
         </a>
       }
     </nav>
+    <div class="nav-footer">
+      <button class="sign-out-btn" (click)="signOut()">
+        <ng-icon name="heroArrowRightOnRectangle" size="20" />
+        <span>Sign Out</span>
+      </button>
+    </div>
   `,
 })
 export class SidebarComponent {
   private readonly roles = inject(RoleService);
   private readonly approvalService = inject(ApprovalService);
+  private readonly auth = inject(AuthenticationService);
 
   readonly pendingCount = toSignal(
     this.approvalService.getPendingCountForMe().pipe(catchError(() => of(0))),
@@ -130,6 +167,10 @@ export class SidebarComponent {
 
   visibleItems() {
     return NAV_ITEMS.filter((item: NavItem) => this.isVisible(item));
+  }
+
+  signOut(): void {
+    this.auth.signOut();
   }
 
   private isVisible(item: NavItem): boolean {
