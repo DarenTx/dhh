@@ -11,6 +11,7 @@ import {
   heroUserGroup,
   heroUsers,
   heroClipboardDocumentList,
+  heroEllipsisHorizontal,
 } from '@ng-icons/heroicons/outline';
 
 import { routes } from './app.routes';
@@ -32,6 +33,7 @@ export const appConfig: ApplicationConfig = {
       heroUserGroup,
       heroUsers,
       heroClipboardDocumentList,
+      heroEllipsisHorizontal,
     }),
     provideServiceWorker('ngsw-worker.js', {
       enabled: !isDevMode(),

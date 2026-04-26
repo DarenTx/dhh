@@ -1,8 +1,12 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 import { NgIconComponent } from '@ng-icons/core';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { of } from 'rxjs';
+import { catchError } from 'rxjs/operators';
 import { RoleService } from '../../core/role/role.service';
 import { NAV_ITEMS, NavItem } from '../nav-config';
+import { ApprovalService } from '../../core/services/approval.service';
 
 @Component({
   selector: 'app-sidebar',
@@ -29,14 +33,14 @@ import { NAV_ITEMS, NavItem } from '../nav-config';
     }
 
     .nav-brand img {
-      width: 80px;
-      height: 80px;
+      width: 120px;
+      height: 120px;
       object-fit: contain;
     }
 
     .nav-brand span {
       font-family: 'Playfair Display', Georgia, 'Times New Roman', serif;
-      font-size: 1rem;
+      font-size: 1.25rem;
       font-weight: 600;
       color: #2c3d2e;
       letter-spacing: 0.01em;
@@ -76,6 +80,21 @@ import { NAV_ITEMS, NavItem } from '../nav-config';
       background: #ebf4ff;
       color: #2b6cb0;
     }
+
+    .badge {
+      margin-left: auto;
+      min-width: 1.25rem;
+      height: 1.25rem;
+      padding: 0 0.3125rem;
+      background: #e53e3e;
+      color: #fff;
+      border-radius: 9999px;
+      font-size: 0.6875rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
   `,
   template: `
     <div class="nav-brand">
@@ -92,6 +111,9 @@ import { NAV_ITEMS, NavItem } from '../nav-config';
         >
           <ng-icon [name]="item.icon" size="20" />
           <span>{{ item.label }}</span>
+          @if (item.path === '/approvals' && pendingCount() > 0) {
+            <span class="badge">{{ pendingCount() }}</span>
+          }
         </a>
       }
     </nav>
@@ -99,6 +121,12 @@ import { NAV_ITEMS, NavItem } from '../nav-config';
 })
 export class SidebarComponent {
   private readonly roles = inject(RoleService);
+  private readonly approvalService = inject(ApprovalService);
+
+  readonly pendingCount = toSignal(
+    this.approvalService.getPendingCountForMe().pipe(catchError(() => of(0))),
+    { initialValue: 0 },
+  );
 
   visibleItems() {
     return NAV_ITEMS.filter((item: NavItem) => this.isVisible(item));

@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { Title } from '@angular/platform-browser';
 import { DecimalPipe, CurrencyPipe, DatePipe, TitleCasePipe } from '@angular/common';
@@ -11,19 +11,21 @@ import {
 import { Lease, LeaseService } from '../../../core/services/lease.service';
 import { Tenant, TenantService } from '../../../core/services/tenant.service';
 import { RoleService } from '../../../core/role/role.service';
+import { ExpenseService, ExpenseWithCategory } from '../../../core/services/expense.service';
 import { NotesSectionComponent } from '../../../shared/components/notes-section/notes-section.component';
 import { PropertyFormComponent } from '../property-form/property-form.component';
 import { LeaseFormComponent } from '../lease-form/lease-form.component';
 import { TenantFormComponent } from '../tenant-form/tenant-form.component';
 import { NewTenancyWizardComponent } from '../new-tenancy-wizard/new-tenancy-wizard.component';
 
-type TabId = 'overview' | 'leases' | 'tenants' | 'notes';
+type TabId = 'overview' | 'leases' | 'tenants' | 'notes' | 'expenses';
 
-const TABS: { id: TabId; label: string }[] = [
+const TABS: { id: TabId; label: string; managerOnly?: boolean }[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'leases', label: 'Leases' },
   { id: 'tenants', label: 'Tenants' },
   { id: 'notes', label: 'Notes' },
+  { id: 'expenses', label: 'Expenses', managerOnly: true },
 ];
 
 @Component({
@@ -281,7 +283,7 @@ const TABS: { id: TabId; label: string }[] = [
 
       <!-- Tab bar -->
       <div class="tab-bar">
-        @for (tab of tabs; track tab.id) {
+        @for (tab of visibleTabs(); track tab.id) {
           <button
             class="tab-btn"
             [class.active]="activeTab() === tab.id"
@@ -406,6 +408,40 @@ const TABS: { id: TabId; label: string }[] = [
               <app-notes-section entityType="property" [entityId]="property()!.id" />
             }
           }
+
+          @case ('expenses') {
+            @if (expensesLoading()) {
+              <p class="loading">Loading expenses…</p>
+            } @else {
+              <div style="margin-bottom:1rem">
+                <p style="margin:0 0 0.25rem;font-size:0.8125rem;color:#a0aec0">YTD total ({{ currentYear }})</p>
+                <p style="margin:0;font-size:1.5rem;font-weight:700;color:#2d3748">{{ ytdTotal() | currency }}</p>
+              </div>
+
+              @if (topCategories().length > 0) {
+                <div style="margin-bottom:1rem">
+                  <p style="margin:0 0 0.5rem;font-size:0.8125rem;color:#a0aec0">Top categories</p>
+                  @for (cat of topCategories(); track cat.name) {
+                    <div style="display:flex;justify-content:space-between;padding:0.375rem 0;border-bottom:1px solid #f7fafc;font-size:0.9375rem">
+                      <span style="color:#4a5568">{{ cat.name }}</span>
+                      <span style="font-weight:600;color:#2d3748">{{ cat.total | currency }}</span>
+                    </div>
+                  }
+                </div>
+              } @else {
+                <p class="empty">No expenses recorded for this property this year.</p>
+              }
+
+              <a
+                [routerLink]="['/expenses']"
+                [queryParams]="{ property: property()!.id }"
+                style="display:inline-flex;align-items:center;gap:0.375rem;font-size:0.875rem;color:#2b6cb0;text-decoration:none"
+              >
+                <ng-icon name="heroCreditCard" size="14" />
+                View all expenses
+              </a>
+            }
+          }
         }
       </div>
     }
@@ -471,6 +507,7 @@ export class PropertyDetailPage implements OnInit {
   private readonly propertyService = inject(PropertyService);
   private readonly leaseService = inject(LeaseService);
   private readonly tenantService = inject(TenantService);
+  private readonly expenseService = inject(ExpenseService);
   private readonly roles = inject(RoleService);
   private readonly title = inject(Title);
 
@@ -486,6 +523,28 @@ export class PropertyDetailPage implements OnInit {
   readonly tenants = signal<Tenant[]>([]);
   readonly tenantsLoading = signal(false);
 
+  readonly propertyExpenses = signal<ExpenseWithCategory[]>([]);
+  readonly expensesLoading = signal(false);
+  readonly currentYear = new Date().getFullYear();
+
+  readonly ytdTotal = computed(() =>
+    this.propertyExpenses()
+      .filter((e) => e.status !== 'rejected')
+      .reduce((sum, e) => sum + e.amount, 0),
+  );
+
+  readonly topCategories = computed(() => {
+    const totals = new Map<string, number>();
+    for (const e of this.propertyExpenses().filter((e) => e.status !== 'rejected')) {
+      const name = e.irs_expense_categories?.name ?? 'Other';
+      totals.set(name, (totals.get(name) ?? 0) + e.amount);
+    }
+    return [...totals.entries()]
+      .map(([name, total]) => ({ name, total }))
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 3);
+  });
+
   readonly showPropertyForm = signal(false);
   readonly showLeaseForm = signal(false);
   readonly showTenantForm = signal(false);
@@ -498,11 +557,18 @@ export class PropertyDetailPage implements OnInit {
     return this.roles.isManagerOrAbove();
   }
 
+  visibleTabs() {
+    return TABS.filter((t) => !t.managerOnly || this.canManage());
+  }
+
   ngOnInit(): void {
     const id = this.route.snapshot.paramMap.get('id')!;
     this.loadProperty(id);
     this.loadLeases(id);
     this.loadTenants(id);
+    if (this.canManage()) {
+      this.loadExpenses(id);
+    }
   }
 
   private loadProperty(id: string): void {
@@ -580,5 +646,16 @@ export class PropertyDetailPage implements OnInit {
     this.property.update((p) => (p ? { ...p, isOccupied: true } : p));
     this.showWizard.set(false);
     this.activeTab.set('leases');
+  }
+
+  private loadExpenses(propertyId: string): void {
+    this.expensesLoading.set(true);
+    this.expenseService.getExpensesForProperty(propertyId, this.currentYear).subscribe({
+      next: (expenses) => {
+        this.propertyExpenses.set(expenses);
+        this.expensesLoading.set(false);
+      },
+      error: () => this.expensesLoading.set(false),
+    });
   }
 }

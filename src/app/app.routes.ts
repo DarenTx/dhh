@@ -5,7 +5,9 @@ import { ShellComponent } from './layout/shell/shell.component';
 import { PropertiesPage } from './features/properties/properties-page';
 import { PropertyDetailPage } from './features/properties/property-detail/property-detail-page';
 import { ExpensesPage } from './features/expenses/expenses-page';
+import { ExpenseDetailPage } from './features/expenses/expense-detail/expense-detail-page';
 import { GuaranteedPaymentsPage } from './features/guaranteed-payments/guaranteed-payments-page';
+import { GuaranteedPaymentDetailPage } from './features/guaranteed-payments/guaranteed-payment-detail/guaranteed-payment-detail-page';
 import { ApprovalsPage } from './features/approvals/approvals-page';
 
 export const routes: Routes = [
@@ -36,9 +38,15 @@ export const routes: Routes = [
           import('./features/tenants/tenant-detail-page').then((m) => m.TenantDetailPage),
       },
       { path: 'expenses', component: ExpensesPage, canActivate: [managerGuard] },
+      { path: 'expenses/:id', component: ExpenseDetailPage, canActivate: [managerGuard] },
       {
         path: 'guaranteed-payments',
         component: GuaranteedPaymentsPage,
+        canActivate: [managerGuard],
+      },
+      {
+        path: 'guaranteed-payments/:id',
+        component: GuaranteedPaymentDetailPage,
         canActivate: [managerGuard],
       },
       { path: 'approvals', component: ApprovalsPage, canActivate: [managerGuard] },

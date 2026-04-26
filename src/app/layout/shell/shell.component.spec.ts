@@ -19,9 +19,14 @@ import { SidebarComponent } from '../sidebar/sidebar.component';
 import { AuthenticationService } from '../../core/auth/authentication.service';
 import { SUPABASE_CLIENT } from '../../core/auth/supabase.provider';
 
+function makeJwt(appMetadata: Record<string, unknown>): string {
+  const payload = btoa(JSON.stringify({ sub: '123', app_metadata: appMetadata }));
+  return `header.${payload}.sig`;
+}
+
 function makeSession(role: 'admin' | 'manager' | 'view_only' | null) {
   if (!role) return null;
-  return { user: { id: '123', app_metadata: { role } } };
+  return { access_token: makeJwt({ role }), user: { id: '123', app_metadata: { role } } };
 }
 
 async function createFixture(role: 'admin' | 'manager' | 'view_only' | null = null) {
@@ -39,6 +44,7 @@ async function createFixture(role: 'admin' | 'manager' | 'view_only' | null = nu
         useValue: {
           auth: {
             onAuthStateChange: vi.fn(() => ({ data: { subscription: { unsubscribe: vi.fn() } } })),
+            getUser: vi.fn().mockResolvedValue({ data: { user: null } }),
           },
         },
       },
@@ -92,6 +98,17 @@ describe('SidebarComponent nav items by role', () => {
         provideRouter([]),
         provideLocationMocks(),
         { provide: AuthenticationService, useValue: mockAuth },
+        {
+          provide: SUPABASE_CLIENT,
+          useValue: {
+            auth: {
+              onAuthStateChange: vi.fn(() => ({
+                data: { subscription: { unsubscribe: vi.fn() } },
+              })),
+              getUser: vi.fn().mockResolvedValue({ data: { user: null } }),
+            },
+          },
+        },
         provideIcons({
           heroHome,
           heroBuildingOffice2,
@@ -110,18 +127,18 @@ describe('SidebarComponent nav items by role', () => {
     return fixture.componentInstance;
   }
 
-  it('shows 3 items for view_only (Dashboard, Properties, Audit)', async () => {
+  it('shows 4 items for view_only (Dashboard, Properties, Tenants, Audit)', async () => {
     const sidebar = await createSidebarFixture('view_only');
-    expect(sidebar.visibleItems().length).toBe(3);
+    expect(sidebar.visibleItems().length).toBe(4);
   });
 
-  it('shows 7 items for manager (all except Admin)', async () => {
+  it('shows 8 items for manager (all + manager items except Admin)', async () => {
     const sidebar = await createSidebarFixture('manager');
-    expect(sidebar.visibleItems().length).toBe(7);
+    expect(sidebar.visibleItems().length).toBe(8);
   });
 
-  it('shows all 8 items for admin', async () => {
+  it('shows all 9 items for admin', async () => {
     const sidebar = await createSidebarFixture('admin');
-    expect(sidebar.visibleItems().length).toBe(8);
+    expect(sidebar.visibleItems().length).toBe(9);
   });
 });

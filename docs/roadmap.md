@@ -209,43 +209,63 @@ _All financial data is hidden from View Only users._
 
 **Fields:**
 
-| Field                | Notes                                                           |
-| -------------------- | --------------------------------------------------------------- |
-| Date                 |                                                                 |
-| Amount               |                                                                 |
-| Description          |                                                                 |
-| IRS expense category | Fixed list — standard IRS Schedule E rental property categories |
-| Sub-category         | Configurable per IRS category in Application Settings           |
-| Linked property      | Optional — can be a general LLC expense not tied to a property  |
-| Receipt / document   | Google Drive link                                               |
-| Approval status      | Pending / Approved / Rejected                                   |
+| Field                | Notes                                                                                                                                                                        |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Date                 | Required                                                                                                                                                                     |
+| Amount               | Required; must be > 0                                                                                                                                                        |
+| Description          | Required                                                                                                                                                                     |
+| IRS expense category | Required — fixed list of 15 standard IRS Schedule E rental property categories                                                                                               |
+| Sub-category         | Required — configurable per IRS category in Application Settings; defaults seeded for all 15                                                                                 |
+| Linked property      | Optional — can be a general LLC expense not tied to a property                                                                                                               |
+| Evidence             | Required — one or more files (images or PDFs) uploaded to Supabase Storage (`expense-evidence` bucket); at least 1 file must be attached before the expense can be submitted |
+| Approval status      | `pending` / `approved` / `rejected` — stored column on the `expenses` table                                                                                                  |
 
 **Approval rule:**
 
-- If `amount > expense approval threshold` (app setting) → approval required from all Managers
-- Notification sent via email and in-app notification when approval is pending
+- Running LLC-wide total of all non-rejected (pending + approved) expenses for the calendar month is checked against `app_settings.expense_monthly_aggregate_threshold`
+- If adding the new expense would meet or exceed the threshold → approval required from all active Managers and Admins (except the submitter)
+- Approval requirement is a snapshot taken at submission time — users added after submission do not retroactively need to approve
+- If no other active managers exist at submission time → auto-approved immediately
+
+**Edit / retract:**
+
+- A **pending** expense can be edited by the submitter; editing deletes and re-creates the approval snapshot
+- A **pending** expense can be retracted (soft deleted) by the submitter
+- **Rejected** expenses are permanent; the submitter must create a new corrected entry
+
+**In-app notifications:**
+
+- Pending approvals badge on the Approvals nav item (driven from `approval_requirements`)
+- Dedicated Approvals inbox — shows only items pending _the current user's_ approval
+
+**Email notifications:** Deferred to a later phase.
 
 ---
 
 ### 3.2 Guaranteed Payment Time Tracking
 
-LLC managers can bill hours worked for the LLC and receive reimbursement each month.
+LLC managers can bill hours worked for the LLC and receive reimbursement.
 
 **Fields:**
 
-| Field            | Notes                                                |
-| ---------------- | ---------------------------------------------------- |
-| Manager          | The submitter (each manager submits their own hours) |
-| Period           | Month and year                                       |
-| Hours billed     |                                                      |
-| Work description | Free-form notes about the work performed             |
-| Approval status  | Pending / Approved / Rejected                        |
+| Field            | Notes                                                                                     |
+| ---------------- | ----------------------------------------------------------------------------------------- |
+| Work date        | Required — one entry per manager per date; unique constraint on `(created_by, work_date)` |
+| Hours billed     | Required; must be > 0                                                                     |
+| Work description | Required — free-form notes about the work performed                                       |
+| Approval status  | `pending` / `approved` / `rejected` — stored column on the `guaranteed_payments` table    |
 
 **Approval rule:**
 
-- Up to the configured hour cap per month — no approval required
-- Over the cap → requires approval from all other Managers
-- Notification sent via email and in-app notification when approval is pending
+- Running total of non-rejected hours for that manager for the calendar month is checked against `app_settings.guaranteed_payment_hour_cap`
+- If adding the new entry would push the total over the cap → approval required from all other active Managers and Admins
+- If no other active managers exist → auto-approved immediately
+
+**List views:**
+
+- Default: "My entries" — monthly accordion showing total hours per month
+- Toggle: "All managers" — grouped by manager, then monthly accordion inside each group
+- All managers and admins can see all entries; view_only cannot see guaranteed payments
 
 ---
 
@@ -255,16 +275,24 @@ Applies to both expenses and guaranteed payment entries.
 
 **Flow:**
 
-1. Record is created with status **Pending Approval**
-2. All Managers are notified via in-app notification and email
-3. Each Manager individually approves or rejects with an optional reason
-4. Record is **Approved** only when every Manager has approved
-5. If any Manager rejects, the record is marked **Rejected** with the stated reason
+1. Record is created; if approval is required, a snapshot of active eligible approvers is captured in `approval_requirements`
+2. A pending-approvals badge appears in the navigation for each approver
+3. Each approver individually approves or rejects with an optional reason
+4. Record is **Approved** only when every approver in the snapshot has approved
+5. If any approver rejects, the record is immediately marked **Rejected** with the stated reason
+6. Rejection is permanent — submitter must create a new corrected entry
 
 **In-app notifications:**
 
-- Pending approvals badge in the navigation
-- Dedicated approval inbox listing all pending items
+- `approval_requirements` table drives both the pending-approvals badge and the inbox
+- Approvals inbox shows only items pending the current user's approval
+- No separate notifications table
+
+**Email notifications:** Deferred to a later phase.
+
+**Database tables:** `expenses`, `guaranteed_payments`, `expense_evidence`
+
+See [docs/phase-3-plan.md](phase-3-plan.md) for the complete implementation plan.
 
 ---
 
@@ -284,11 +312,11 @@ Each user connects their **personal Google account** via OAuth. Photos are an ex
 
 ### 4.2 Google Drive — Document Storage
 
-- Receipts and expense documents attached to expense records
 - General documents stored and linked per property
 - Some documents may be general LLC documents not tied to a specific property
-- File upload and link UI appears on the property detail page and on expense records
+- File upload and link UI appears on the property detail page
 - Uses Google Drive API / Google Picker for browsing and attaching files
+- **Note:** Expense evidence (receipts/photos) is stored in Supabase Storage as of Phase 3 and is out of scope here
 
 ---
 
@@ -358,5 +386,6 @@ Photos are uploaded to the LLC's Google Photos account with the note embedded as
 | 1   | **Lease PDFs**                    | Phase 2 adds a `document_url` text field on leases for manual Google Drive link entry. Full Drive picker integration deferred to Phase 4.                                                              |
 | 2   | **Google Photos API feasibility** | Library API write restrictions may require using Supabase Storage as a fallback; evaluate during Phase 5                                                                                               |
 | 3   | **Expense reporting / export**    | No reporting was scoped; a CSV or PDF export for tax season may be a low-effort addition worth adding to Phase 3                                                                                       |
-| 4   | **Privacy & Terms pages**         | Stub components exist (`/privacy`, `/tos`) but content has not been written; required before public launch                                                                                             |
-| 5   | **Login spec alignment**          | The login spec doc (`docs/specs/login/`) defines a separate `/login/magic-link` route; current implementation combines both Google OAuth and magic link on one page — resolve before closing auth work |
+| 4   | **Phase 4 Google Drive scope**    | Phase 3 uses Supabase Storage for expense evidence (images + PDFs). Phase 4 Google Drive integration now covers only lease documents and general property documents — expense receipts are excluded.   |
+| 5   | **Privacy & Terms pages**         | Stub components exist (`/privacy`, `/tos`) but content has not been written; required before public launch                                                                                             |
+| 6   | **Login spec alignment**          | The login spec doc (`docs/specs/login/`) defines a separate `/login/magic-link` route; current implementation combines both Google OAuth and magic link on one page — resolve before closing auth work |

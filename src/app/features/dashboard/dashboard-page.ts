@@ -1,8 +1,10 @@
 import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { CurrencyPipe, DatePipe } from '@angular/common';
 import { Title } from '@angular/platform-browser';
 import { NgIconComponent } from '@ng-icons/core';
 import { PropertyService } from '../../core/services/property.service';
+import { ExpenseService, ExpenseWithCategory } from '../../core/services/expense.service';
 import { RoleService } from '../../core/role/role.service';
 
 interface DashboardStats {
@@ -14,7 +16,7 @@ interface DashboardStats {
 @Component({
   selector: 'app-dashboard-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, NgIconComponent],
+  imports: [RouterLink, NgIconComponent, CurrencyPipe, DatePipe],
   styles: `
     .page {
       padding: 1.25rem 1.5rem;
@@ -117,6 +119,61 @@ interface DashboardStats {
     .loading {
       color: #718096;
     }
+
+    .recent-expenses h2 {
+      margin: 0 0 1rem;
+      font-size: 1.125rem;
+      font-weight: 600;
+      color: #2d3748;
+    }
+
+    .expense-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.625rem 0;
+      border-bottom: 1px solid #f7fafc;
+      font-size: 0.9375rem;
+    }
+
+    .expense-row:last-child {
+      border-bottom: none;
+    }
+
+    .expense-desc {
+      color: #2d3748;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 60%;
+    }
+
+    .expense-meta {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 0.125rem;
+    }
+
+    .expense-amount {
+      font-weight: 600;
+      color: #2d3748;
+    }
+
+    .expense-date {
+      font-size: 0.8125rem;
+      color: #a0aec0;
+    }
+
+    .view-all-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.375rem;
+      font-size: 0.875rem;
+      color: #2b6cb0;
+      text-decoration: none;
+      margin-top: 0.75rem;
+    }
   `,
   template: `
     <div class="page">
@@ -175,16 +232,41 @@ interface DashboardStats {
           }
         </div>
       </div>
+
+      @if (canManage()) {
+        <div class="recent-expenses" style="margin-top:2rem">
+          <h2>Recent expenses</h2>
+          @if (recentExpenses().length === 0 && !loading()) {
+            <p style="color:#a0aec0;font-size:0.9375rem">No expenses recorded yet.</p>
+          } @else {
+            @for (exp of recentExpenses(); track exp.id) {
+              <div class="expense-row">
+                <span class="expense-desc">{{ exp.description }}</span>
+                <div class="expense-meta">
+                  <span class="expense-amount">{{ exp.amount | currency }}</span>
+                  <span class="expense-date">{{ exp.date | date: 'mediumDate' }}</span>
+                </div>
+              </div>
+            }
+            <a class="view-all-link" routerLink="/expenses">
+              <ng-icon name="heroArrowRight" size="14" />
+              View all expenses
+            </a>
+          }
+        </div>
+      }
     </div>
   `,
 })
 export class DashboardPage implements OnInit {
   private readonly propertyService = inject(PropertyService);
+  private readonly expenseService = inject(ExpenseService);
   private readonly roles = inject(RoleService);
   private readonly title = inject(Title);
 
   readonly loading = signal(true);
   readonly stats = signal<DashboardStats | null>(null);
+  readonly recentExpenses = signal<ExpenseWithCategory[]>([]);
 
   canManage(): boolean {
     return this.roles.isManagerOrAbove();
@@ -204,5 +286,12 @@ export class DashboardPage implements OnInit {
       },
       error: () => this.loading.set(false),
     });
+
+    if (this.canManage()) {
+      this.expenseService.getRecentExpenses(5).subscribe({
+        next: (expenses) => this.recentExpenses.set(expenses),
+        error: () => {},
+      });
+    }
   }
 }

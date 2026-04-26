@@ -2,7 +2,6 @@ import { TestBed } from '@angular/core/testing';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { provideRouter } from '@angular/router';
 import { App } from './app';
-import { Home } from './home/home';
 import { routes } from './app.routes';
 
 describe('App', () => {

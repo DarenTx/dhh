@@ -44,6 +44,33 @@ function setup(opts: { notes?: Note[]; canManage?: boolean } = {}) {
     ],
   });
 
+  // Signal-based inputs are not registered in ɵcmp.inputs by Angular JIT (no AOT compiler plugin).
+  // Patch them manually so TestBed.setInput() works. InputFlags.SignalBased = 1.
+  const cmp = (NotesSectionComponent as any).ɵcmp;
+  if (cmp && !cmp.inputs['entityType']) {
+    // ɵcmp.inputs may be a non-extensible object — replace it with a mutable copy
+    const patchedInputs = Object.assign({}, cmp.inputs, {
+      entityType: ['entityType', 1, null],
+      entityId: ['entityId', 1, null],
+    });
+    Object.defineProperty(cmp, 'inputs', {
+      value: patchedInputs,
+      writable: true,
+      configurable: true,
+    });
+    if (cmp.declaredInputs) {
+      const patchedDeclared = Object.assign({}, cmp.declaredInputs, {
+        entityType: 'entityType',
+        entityId: 'entityId',
+      });
+      Object.defineProperty(cmp, 'declaredInputs', {
+        value: patchedDeclared,
+        writable: true,
+        configurable: true,
+      });
+    }
+  }
+
   const fixture: ComponentFixture<NotesSectionComponent> =
     TestBed.createComponent(NotesSectionComponent);
   fixture.componentRef.setInput('entityType', 'property');
