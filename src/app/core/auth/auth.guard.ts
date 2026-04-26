@@ -27,7 +27,7 @@ export function authGuard(): Observable<boolean | UrlTree> {
         return from(auth.signOutSilent()).pipe(
           map(() =>
             router.createUrlTree(['/login'], {
-              queryParams: { error: 'account_deactivated' },
+              queryParams: { error: 'Login not allowed' },
             }),
           ),
         );
