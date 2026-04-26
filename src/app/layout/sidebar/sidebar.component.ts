@@ -34,19 +34,9 @@ import { AuthenticationService } from '../../core/auth/authentication.service';
     }
 
     .nav-brand img {
-      width: 160px;
-      height: 160px;
+      width: 200px;
+      height: 200px;
       object-fit: contain;
-    }
-
-    .nav-brand span {
-      font-family: 'Playfair Display', Georgia, 'Times New Roman', serif;
-      font-size: 1.25rem;
-      font-weight: 600;
-      color: #2c3d2e;
-      letter-spacing: 0.01em;
-      text-align: center;
-      line-height: 1.3;
     }
 
     nav {
@@ -129,7 +119,6 @@ import { AuthenticationService } from '../../core/auth/authentication.service';
   template: `
     <div class="nav-brand">
       <img src="/dahl-heritage-homes.png" alt="Dahl Heritage Homes logo" />
-      <span>Dahl Heritage Homes</span>
     </div>
     <nav>
       @for (item of visibleItems(); track item.path) {

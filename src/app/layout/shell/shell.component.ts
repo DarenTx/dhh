@@ -19,6 +19,29 @@ import { SidebarComponent } from '../sidebar/sidebar.component';
       display: none;
     }
 
+    .main-area {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .top-bar {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      padding: 0 1.5rem;
+      height: 3.5rem;
+      background: #fff;
+      border-bottom: 1px solid #e2e8f0;
+      font-family: 'Playfair Display', Georgia, 'Times New Roman', serif;
+      font-size: 1.375rem;
+      font-weight: 600;
+      color: #2c3d2e;
+      letter-spacing: 0.01em;
+    }
+
     .content {
       flex: 1;
       min-height: 0;
@@ -51,9 +74,12 @@ import { SidebarComponent } from '../sidebar/sidebar.component';
   `,
   template: `
     <app-sidebar class="sidebar" />
-    <main class="content">
-      <router-outlet />
-    </main>
+    <div class="main-area">
+      <div class="top-bar">Dahl Heritage Homes</div>
+      <main class="content">
+        <router-outlet />
+      </main>
+    </div>
     <app-bottom-nav class="bottom-nav" />
   `,
 })
