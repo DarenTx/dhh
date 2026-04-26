@@ -16,6 +16,7 @@ import {
   heroPlus,
   heroEnvelope,
   heroFunnel,
+  heroKey,
 } from '@ng-icons/heroicons/outline';
 
 import { routes } from './app.routes';
@@ -42,6 +43,7 @@ export const appConfig: ApplicationConfig = {
       heroPlus,
       heroEnvelope,
       heroFunnel,
+      heroKey,
     }),
     provideServiceWorker('ngsw-worker.js', {
       enabled: !isDevMode(),

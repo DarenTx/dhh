@@ -201,7 +201,7 @@ interface DashboardStats {
 
           <div class="stat-card">
             <div class="stat-icon stat-icon-orange">
-              <ng-icon name="heroExclamationCircle" size="20" />
+              <ng-icon name="heroKey" size="20" />
             </div>
             <p class="stat-value">{{ stats()!.vacantProperties }}</p>
             <p class="stat-label">Vacant</p>
