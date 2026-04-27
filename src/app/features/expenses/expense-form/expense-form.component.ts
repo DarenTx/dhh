@@ -322,16 +322,34 @@ type WizardStep = 1 | 2 | 3;
         cursor: not-allowed;
       }
     }
+
+    .spinner {
+      display: inline-block;
+      width: 0.875rem;
+      height: 0.875rem;
+      border: 2px solid rgba(255, 255, 255, 0.4);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      vertical-align: text-bottom;
+      margin-right: 0.25rem;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
   `,
   template: `
     <div class="wizard-steps">
       <div class="step-indicator" [class.active]="step() === 1" [class.done]="step() > 1">
-        <span class="step-num">{{ step() > 1 ? 'âœ“' : '1' }}</span>
+        <span class="step-num">{{ step() > 1 ? '✓' : '1' }}</span>
         <span>Upload</span>
       </div>
       <div class="step-sep"></div>
       <div class="step-indicator" [class.active]="step() === 2" [class.done]="step() > 2">
-        <span class="step-num">{{ step() > 2 ? 'âœ“' : '2' }}</span>
+        <span class="step-num">{{ step() > 2 ? '✓' : '2' }}</span>
         <span>Expense</span>
       </div>
       <div class="step-sep"></div>
@@ -373,25 +391,11 @@ type WizardStep = 1 | 2 | 3;
           />
         </label>
 
-        <div class="upload-actions">
-          <button
-            type="button"
-            class="btn-small"
-            (click)="runAiExtraction()"
-            [disabled]="extractingAi() || pendingFiles().length === 0"
-          >
-            {{ extractingAi() ? 'Extractingâ€¦' : 'Extract with AI' }}
-          </button>
-        </div>
-
         @if (extractionError()) {
           <p class="error-msg">{{ extractionError() }}</p>
         }
         @for (w of extractionWarnings(); track w) {
           <p class="warn-msg">{{ w }}</p>
-        }
-        @if (extractionDone() && !extractionError()) {
-          <p class="hint">Fields pre-populated from first receipt. Click "Next: Review Expense Details" to continue.</p>
         }
       </div>
 
@@ -404,10 +408,14 @@ type WizardStep = 1 | 2 | 3;
         <button
           type="button"
           class="btn-primary"
-          [disabled]="pendingFiles().length === 0"
+          [disabled]="pendingFiles().length === 0 || extractingAi()"
           (click)="proceedFromUpload()"
         >
-          Next: Review Expense Details
+          @if (extractingAi()) {
+            <span class="spinner"></span> Analyzing receipt…
+          } @else {
+            Next: Review Expense Details
+          }
         </button>
       </div>
     }
@@ -471,7 +479,7 @@ type WizardStep = 1 | 2 | 3;
               "
               (change)="onCategoryChange()"
             >
-              <option value="">Select categoryâ€¦</option>
+              <option value="">Select category…</option>
               @for (cat of categories(); track cat.id) {
                 <option [value]="cat.id">{{ cat.name }}</option>
               }
@@ -486,7 +494,7 @@ type WizardStep = 1 | 2 | 3;
                 form.get('subcategory_id')?.touched && form.get('subcategory_id')?.invalid
               "
             >
-              <option value="">Select sub-categoryâ€¦</option>
+              <option value="">Select sub-category…</option>
               @for (sub of subcategories(); track sub.id) {
                 <option [value]="sub.id">{{ sub.name }}</option>
               }
@@ -524,7 +532,9 @@ type WizardStep = 1 | 2 | 3;
         }
 
         <div class="btn-row">
-          <button type="button" class="btn-secondary" (click)="step.set(1)">â† Back to Upload</button>
+          <button type="button" class="btn-secondary" (click)="step.set(1)">
+            ← Back to Upload
+          </button>
           <button type="submit" class="btn-primary">Next: Confirm & Save</button>
         </div>
       </form>
@@ -560,9 +570,11 @@ type WizardStep = 1 | 2 | 3;
         }
 
         <div class="btn-row">
-          <button type="button" class="btn-secondary" (click)="step.set(2)">â† Back to Expense</button>
+          <button type="button" class="btn-secondary" (click)="step.set(2)">
+            ← Back to Expense
+          </button>
           <button class="btn-primary" [disabled]="saving()" (click)="save()">
-            {{ saving() ? 'Savingâ€¦' : 'Log Expense' }}
+            {{ saving() ? 'Saving…' : 'Log Expense' }}
           </button>
         </div>
       </div>
@@ -602,14 +614,13 @@ export class ExpenseFormComponent implements OnInit {
 
   readonly selectedSubcategoryName = computed(
     () =>
-      this.subcategories().find((s) => s.id === this.form.get('subcategory_id')?.value)?.name ??
-      '',
+      this.subcategories().find((s) => s.id === this.form.get('subcategory_id')?.value)?.name ?? '',
   );
 
   readonly selectedPropertyName = computed(
     () =>
-      this.properties().find((p) => p.id === this.form.get('property_id')?.value)
-        ?.address_line1 ?? '',
+      this.properties().find((p) => p.id === this.form.get('property_id')?.value)?.address_line1 ??
+      '',
   );
 
   readonly form = new FormGroup({
@@ -632,7 +643,50 @@ export class ExpenseFormComponent implements OnInit {
       return;
     }
     this.uploadStepError.set(null);
-    this.step.set(2);
+    this.extractionError.set(null);
+    this.extractionWarnings.set([]);
+
+    const file = this.pendingFiles()[0];
+    this.extractingAi.set(true);
+
+    this.evidenceService.uploadDraftEvidence(file).subscribe({
+      next: (draftPath) => {
+        this.aiExtractionService
+          .extractExpense({
+            storage_bucket: 'expense-evidence',
+            storage_path: draftPath,
+            property_id: this.form.get('property_id')?.value || undefined,
+          })
+          .subscribe({
+            next: (result) => {
+              this.extractionWarnings.set(result.warnings ?? []);
+              this.applyExpenseExtraction(result);
+              this.extractingAi.set(false);
+              this.evidenceService.deleteStorageObject(draftPath).subscribe({
+                next: () => undefined,
+                error: () => undefined,
+              });
+              this.step.set(2);
+            },
+            error: (err) => {
+              this.extractionError.set(err?.message ?? 'AI extraction failed.');
+              this.extractingAi.set(false);
+              this.evidenceService.deleteStorageObject(draftPath).subscribe({
+                next: () => undefined,
+                error: () => undefined,
+              });
+              this.step.set(2);
+            },
+          });
+      },
+      error: (err) => {
+        this.extractionError.set(
+          err?.message ?? 'Failed to upload draft evidence for AI extraction.',
+        );
+        this.extractingAi.set(false);
+        this.step.set(2);
+      },
+    });
   }
 
   submitExpenseForm(): void {

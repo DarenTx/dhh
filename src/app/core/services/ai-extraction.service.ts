@@ -75,10 +75,12 @@ export class AiExtractionService {
 
   extractLease(payload: LeaseExtractionRequest): Observable<LeaseExtractionResult> {
     return from(
-      this.supabase.functions.invoke('extract-lease', { body: payload }).then(({ data, error }) => {
-        if (error) throw error;
-        return data as LeaseExtractionResult;
-      }),
+      this.supabase.functions
+        .invoke('extract-lease', { body: payload })
+        .then(async ({ data, error }) => {
+          if (error) throw new Error(await extractFunctionErrorMessage(error));
+          return data as LeaseExtractionResult;
+        }),
     );
   }
 
@@ -86,10 +88,20 @@ export class AiExtractionService {
     return from(
       this.supabase.functions
         .invoke('extract-expense', { body: payload })
-        .then(({ data, error }) => {
-          if (error) throw error;
+        .then(async ({ data, error }) => {
+          if (error) throw new Error(await extractFunctionErrorMessage(error));
           return data as ExpenseExtractionResult;
         }),
     );
   }
+}
+
+async function extractFunctionErrorMessage(error: unknown): Promise<string> {
+  try {
+    const body = await (error as { context?: Response }).context?.json();
+    if (typeof body?.error === 'string') return body.error;
+  } catch {
+    // fall through to generic message
+  }
+  return (error as Error)?.message ?? 'Unknown error';
 }
