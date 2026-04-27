@@ -14,6 +14,10 @@ export class StorageService {
     leaseId?: string,
     existingPath?: string | null,
   ): Observable<string> {
+    if (!isPdfFile(file)) {
+      return from(Promise.reject(new Error('Only PDF files are supported for lease documents.')));
+    }
+
     if (existingPath && !/^https?:\/\//i.test(existingPath)) {
       return from(
         this.supabase.storage
@@ -78,4 +82,8 @@ export class StorageService {
         }),
     );
   }
+}
+
+function isPdfFile(file: File): boolean {
+  return file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
 }

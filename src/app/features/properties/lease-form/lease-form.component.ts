@@ -186,10 +186,10 @@ const STATUS_OPTIONS: { value: Lease['status']; label: string }[] = [
           <input
             id="doc-upload"
             type="file"
-            accept="application/pdf,image/png,image/jpeg,image/webp"
+            accept="application/pdf,.pdf"
             (change)="onDocumentSelected($event)"
           />
-          <p class="field-hint">Upload a PDF or image file to store it in Supabase Storage.</p>
+          <p class="field-hint">Upload a PDF lease document.</p>
           @if (selectedDocumentName()) {
             <p class="field-hint">Selected file: {{ selectedDocumentName() }}</p>
           }
@@ -268,6 +268,16 @@ export class LeaseFormComponent implements OnInit {
   onDocumentSelected(event: Event): void {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0] ?? null;
+
+    if (file && !isPdfFile(file)) {
+      this.selectedDocument = null;
+      this.selectedDocumentName.set(null);
+      this.serverError.set('Only PDF files are supported for lease documents.');
+      input.value = '';
+      return;
+    }
+
+    this.serverError.set(null);
     this.selectedDocument = file;
     this.selectedDocumentName.set(file?.name ?? null);
   }
@@ -330,4 +340,8 @@ export class LeaseFormComponent implements OnInit {
 
     persistLease(raw.document_url || null);
   }
+}
+
+function isPdfFile(file: File): boolean {
+  return file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
 }
