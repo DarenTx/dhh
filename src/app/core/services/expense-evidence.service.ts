@@ -58,6 +58,20 @@ export class ExpenseEvidenceService {
     );
   }
 
+  uploadDraftEvidence(file: File): Observable<string> {
+    const ext = file.name.split('.').pop();
+    const storagePath = `draft/${crypto.randomUUID()}.${ext}`;
+    return from(
+      this.supabase.storage
+        .from(this.bucket)
+        .upload(storagePath, file)
+        .then(({ data, error }) => {
+          if (error) throw error;
+          return data!.path;
+        }),
+    );
+  }
+
   deleteEvidence(id: string, storagePath: string): Observable<void> {
     return from(
       this.supabase.storage
@@ -70,6 +84,17 @@ export class ExpenseEvidenceService {
             .delete()
             .eq('id', id);
           if (dbError) throw dbError;
+        }),
+    );
+  }
+
+  deleteStorageObject(storagePath: string): Observable<void> {
+    return from(
+      this.supabase.storage
+        .from(this.bucket)
+        .remove([storagePath])
+        .then(({ error }) => {
+          if (error) throw error;
         }),
     );
   }

@@ -1089,9 +1089,9 @@ export class PropertyDetailPage implements OnInit {
     this.showTenantForm.set(false);
   }
 
-  onWizardSaved(result: { lease: Lease; tenant: Tenant }): void {
+  onWizardSaved(result: { lease: Lease; tenants: Tenant[] }): void {
     this.leases.update((prev) => [result.lease, ...prev]);
-    this.tenants.update((prev) => [...prev, result.tenant]);
+    this.tenants.update((prev) => [...prev, ...result.tenants]);
     this.property.update((p) => (p ? { ...p, isOccupied: true } : p));
     this.showWizard.set(false);
     this.activeTab.set('leases');

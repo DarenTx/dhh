@@ -34,7 +34,7 @@ import { SidebarComponent } from '../sidebar/sidebar.component';
       gap: 0.75rem;
       padding: 0 1.5rem;
       height: 5rem;
-      background: #fdf8f2;
+      background: #fff;
       border-bottom: 3px solid #8a9a6e;
       font-family: 'Playfair Display', Georgia, 'Times New Roman', serif;
       font-size: 1.375rem;
@@ -50,7 +50,7 @@ import { SidebarComponent } from '../sidebar/sidebar.component';
     }
 
     .top-bar-tagline {
-      font-size: 0.9375rem;
+      font-size: 0.8rem;
       font-weight: 400;
       color: #6b7c6e;
       letter-spacing: 0.04em;
@@ -58,8 +58,8 @@ import { SidebarComponent } from '../sidebar/sidebar.component';
     }
 
     .top-bar-logo {
-      height: 2.5rem;
-      width: 2.5rem;
+      height: 4.5rem;
+      width: 4.5rem;
       object-fit: contain;
     }
 
@@ -103,7 +103,11 @@ import { SidebarComponent } from '../sidebar/sidebar.component';
     <app-sidebar class="sidebar" />
     <div class="main-area">
       <div class="top-bar">
-        <img class="top-bar-logo" src="/dahl-heritage-homes.png" alt="Dahl Heritage Homes logo" />
+        <img
+          class="top-bar-logo"
+          src="/dahl-heritage-homes-transparent.png"
+          alt="Dahl Heritage Homes logo"
+        />
         <div class="top-bar-text">
           <span>Dahl Heritage Homes</span>
           <span class="top-bar-tagline">Preserving Heritage and Creating Homes.</span>
