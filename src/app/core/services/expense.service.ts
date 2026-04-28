@@ -46,6 +46,22 @@ export interface UpdateExpensePayload {
 export class ExpenseService {
   private readonly supabase = inject<SupabaseClient>(SUPABASE_CLIENT);
 
+  getAllExpenses(): Observable<ExpenseWithCategory[]> {
+    return from(
+      this.supabase
+        .from('expenses')
+        .select(
+          '*, irs_expense_categories(id, name), expense_subcategories(id, name), properties(id, address_line1)',
+        )
+        .eq('is_active', true)
+        .order('date', { ascending: false })
+        .then(({ data, error }) => {
+          if (error) throw error;
+          return (data ?? []) as ExpenseWithCategory[];
+        }),
+    );
+  }
+
   getExpenses(year: number, month: number): Observable<ExpenseWithCategory[]> {
     const start = new Date(year, month - 1, 1).toISOString().slice(0, 10);
     const end = new Date(year, month, 0).toISOString().slice(0, 10);

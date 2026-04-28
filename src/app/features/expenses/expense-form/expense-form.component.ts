@@ -244,15 +244,6 @@ type WizardStep = 1 | 2 | 3;
       color: #e53e3e;
     }
 
-    .review-check {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      margin-top: 0.75rem;
-      font-size: 0.875rem;
-      color: #2d3748;
-    }
-
     .confirm-summary {
       background: #f7fafc;
       border: 1px solid #e2e8f0;
@@ -518,15 +509,6 @@ type WizardStep = 1 | 2 | 3;
           </select>
         </div>
 
-        <label class="review-check">
-          <input
-            type="checkbox"
-            [checked]="reviewConfirmed()"
-            (change)="toggleReviewConfirmed($event)"
-          />
-          I have reviewed the expense details and they are correct.
-        </label>
-
         @if (expenseFormError()) {
           <p class="error-msg">{{ expenseFormError() }}</p>
         }
@@ -603,7 +585,6 @@ export class ExpenseFormComponent implements OnInit {
   readonly extractingAi = signal(false);
   readonly extractionError = signal<string | null>(null);
   readonly extractionWarnings = signal<string[]>([]);
-  readonly reviewConfirmed = signal(false);
 
   readonly selectedCategoryName = computed(
     () =>
@@ -689,10 +670,6 @@ export class ExpenseFormComponent implements OnInit {
   }
 
   submitExpenseForm(): void {
-    if (!this.reviewConfirmed()) {
-      this.expenseFormError.set('Please confirm that you have reviewed the expense details.');
-      return;
-    }
     this.form.markAllAsTouched();
     if (this.form.invalid) {
       this.expenseFormError.set(null);
@@ -771,11 +748,6 @@ export class ExpenseFormComponent implements OnInit {
   removeFile(index: number): void {
     this.pendingFiles.update((prev) => prev.filter((_, i) => i !== index));
     this.extractionError.set(null);
-  }
-
-  toggleReviewConfirmed(event: Event): void {
-    const input = event.target as HTMLInputElement;
-    this.reviewConfirmed.set(!!input.checked);
   }
 
   runAiExtraction(): void {

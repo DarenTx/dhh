@@ -349,27 +349,13 @@ export class ExpensesPage implements OnInit {
   }
 
   private loadAll(): void {
-    // Load last 12 months
-    const now = new Date();
-    const results: ExpenseWithCategory[] = [];
-    let pending = 12;
-    for (let i = 0; i < 12; i++) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      this.expenseService.getExpenses(d.getFullYear(), d.getMonth() + 1).subscribe({
-        next: (rows) => {
-          results.push(...rows);
-          pending--;
-          if (pending === 0) {
-            this.raw.set(results.sort((a, b) => b.date.localeCompare(a.date)));
-            this.loading.set(false);
-          }
-        },
-        error: () => {
-          pending--;
-          if (pending === 0) this.loading.set(false);
-        },
-      });
-    }
+    this.expenseService.getAllExpenses().subscribe({
+      next: (rows) => {
+        this.raw.set(rows);
+        this.loading.set(false);
+      },
+      error: () => this.loading.set(false),
+    });
   }
 
   toggleMonth(grp: MonthGroup): void {
