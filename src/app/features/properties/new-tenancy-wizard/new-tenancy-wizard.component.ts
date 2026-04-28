@@ -476,24 +476,6 @@ type WizardStep = 1 | 2 | 3 | 4;
           </div>
         </div>
 
-        <div class="field">
-          <label for="status">Status</label>
-          <select id="status" formControlName="status">
-            <option value="active">Active</option>
-            <option value="expired">Expired</option>
-            <option value="terminated">Terminated</option>
-          </select>
-        </div>
-
-        <label class="review-check">
-          <input
-            type="checkbox"
-            [checked]="leaseReviewConfirmed()"
-            (change)="toggleLeaseReview($event)"
-          />
-          I have reviewed the lease details and they are correct.
-        </label>
-
         @if (leaseError()) {
           <p class="error-msg">{{ leaseError() }}</p>
         }
@@ -616,7 +598,6 @@ type WizardStep = 1 | 2 | 3 | 4;
           }
           <p>Rent: {{ leaseForm.getRawValue().monthly_rent | currency }}/month</p>
           <p>Deposit: {{ leaseForm.getRawValue().security_deposit | currency }}</p>
-          <p>Status: {{ leaseForm.getRawValue().status }}</p>
         </div>
 
         <div class="confirm-summary">
@@ -678,7 +659,6 @@ export class NewTenancyWizardComponent implements OnInit {
   );
 
   readonly extractingLease = signal(false);
-  readonly leaseReviewConfirmed = signal(false);
   readonly selectedLeaseDocument = signal<File | null>(null);
   readonly selectedLeaseDocumentName = signal<string | null>(null);
   readonly leaseDocumentPath = signal<string | null>(null);
@@ -688,7 +668,6 @@ export class NewTenancyWizardComponent implements OnInit {
     end_date: [''],
     monthly_rent: [null as number | null, Validators.required],
     security_deposit: [null as number | null, Validators.required],
-    status: ['active'],
   });
 
   readonly tenantForm = this.fb.group({
@@ -767,11 +746,6 @@ export class NewTenancyWizardComponent implements OnInit {
   }
 
   submitLeaseForm(): void {
-    if (!this.leaseReviewConfirmed()) {
-      this.leaseError.set('Please confirm that you have reviewed the lease details.');
-      return;
-    }
-
     if (this.leaseForm.invalid) {
       this.leaseForm.markAllAsTouched();
       return;
@@ -820,7 +794,6 @@ export class NewTenancyWizardComponent implements OnInit {
     this.selectedLeaseDocument.set(file);
     this.selectedLeaseDocumentName.set(file.name);
     this.leaseDocumentPath.set(null);
-    this.leaseReviewConfirmed.set(false);
     this.leaseExtractionError.set(null);
     this.leaseExtractionWarnings.set([]);
     this.addressMismatch.set(false);
@@ -831,11 +804,6 @@ export class NewTenancyWizardComponent implements OnInit {
   toggleMismatchAcknowledged(event: Event): void {
     const input = event.target as HTMLInputElement;
     this.mismatchAcknowledged.set(!!input.checked);
-  }
-
-  toggleLeaseReview(event: Event): void {
-    const input = event.target as HTMLInputElement;
-    this.leaseReviewConfirmed.set(!!input.checked);
   }
 
   private applyLeaseExtraction(result: LeaseExtractionResult): void {
@@ -859,17 +827,12 @@ export class NewTenancyWizardComponent implements OnInit {
     if ((confidence['end_date'] ?? 0) >= optionalThreshold) {
       this.leaseForm.patchValue({ end_date: fields.end_date ?? '' });
     }
-    if (fields.status && (confidence['status'] ?? 0) >= optionalThreshold) {
-      this.leaseForm.patchValue({ status: fields.status });
-    }
 
     if (fields.property_address) {
       this.extractedPropertyAddress.set(fields.property_address);
       const expected = this.expectedPropertyAddress();
       if (expected) {
-        const leaseAddress = normalizeAddressForMatch(fields.property_address);
-        const expectedAddress = normalizeAddressForMatch(expected);
-        if (leaseAddress !== expectedAddress) {
+        if (!addressesMatch(fields.property_address, expected)) {
           this.addressMismatch.set(true);
           this.mismatchAcknowledged.set(false);
         }
@@ -906,8 +869,6 @@ export class NewTenancyWizardComponent implements OnInit {
         }
       });
     }
-
-    this.leaseReviewConfirmed.set(false);
   }
 
   save(): void {
@@ -944,7 +905,7 @@ export class NewTenancyWizardComponent implements OnInit {
       end_date: leaseValue.end_date || null,
       monthly_rent: leaseValue.monthly_rent!,
       security_deposit: leaseValue.security_deposit!,
-      status: leaseValue.status as 'active' | 'expired' | 'terminated',
+      status: 'active',
       document_url: this.leaseDocumentPath(),
     };
 
@@ -1001,9 +962,63 @@ function isPdfFile(file: File): boolean {
   return file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
 }
 
-function normalizeAddressForMatch(value: string): string {
+const ADDRESS_STATE_ABBREVIATIONS: Record<string, string> = {
+  al: 'alabama', ak: 'alaska', az: 'arizona', ar: 'arkansas',
+  ca: 'california', co: 'colorado', de: 'delaware',
+  fl: 'florida', ga: 'georgia', hi: 'hawaii', id: 'idaho',
+  il: 'illinois', in: 'indiana', ia: 'iowa', ks: 'kansas',
+  ky: 'kentucky', la: 'louisiana', me: 'maine', md: 'maryland',
+  ma: 'massachusetts', mi: 'michigan', mn: 'minnesota', ms: 'mississippi',
+  mo: 'missouri', mt: 'montana', ne: 'nebraska', nv: 'nevada',
+  nh: 'newhampshire', nj: 'newjersey', nm: 'newmexico', ny: 'newyork',
+  nc: 'northcarolina', nd: 'northdakota', oh: 'ohio', ok: 'oklahoma',
+  or: 'oregon', pa: 'pennsylvania', ri: 'rhodeisland', sc: 'southcarolina',
+  sd: 'southdakota', tn: 'tennessee', tx: 'texas', ut: 'utah',
+  vt: 'vermont', va: 'virginia', wa: 'washington', wv: 'westvirginia',
+  wi: 'wisconsin', wy: 'wyoming', dc: 'districtofcolumbia',
+};
+
+// Street type words to remove — avoids false mismatches when one address
+// includes a suffix (e.g. "Avenue") that the stored address omits.
+// Excludes ambiguous abbreviations like "st" (Saint) and "ct" (Connecticut).
+const ADDRESS_STREET_TYPES = new Set([
+  'avenue', 'ave', 'boulevard', 'blvd', 'circle', 'cir', 'court',
+  'drive', 'dr', 'highway', 'hwy', 'lane', 'ln', 'parkway', 'pkwy',
+  'place', 'pl', 'road', 'rd', 'square', 'sq', 'street',
+  'terrace', 'ter', 'trail', 'trl', 'way',
+]);
+
+function normalizeAddressTokens(value: string): string[] {
   return value
     .toLowerCase()
-    .replace(/[^a-z0-9]/g, '')
-    .trim();
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter((t) => t.length > 0)
+    .map((t) => ADDRESS_STATE_ABBREVIATIONS[t] ?? t)
+    .filter((t) => !ADDRESS_STREET_TYPES.has(t));
+}
+
+/** Returns true when the two address strings refer to the same property.
+ * Strategy: if the house number AND ZIP code both match, it's the same
+ * location regardless of how the street name was abbreviated. Only fall
+ * back to a full token comparison when one of those anchors is absent. */
+function addressesMatch(a: string, b: string): boolean {
+  const tokensA = normalizeAddressTokens(a);
+  const tokensB = normalizeAddressTokens(b);
+
+  const houseNumberPattern = /^\d+$/;
+  const zipPattern = /^\d{5}$/;
+
+  const houseA = tokensA.find((t) => houseNumberPattern.test(t));
+  const houseB = tokensB.find((t) => houseNumberPattern.test(t));
+  const zipA = tokensA.find((t) => zipPattern.test(t));
+  const zipB = tokensB.find((t) => zipPattern.test(t));
+
+  if (houseA && houseB && zipA && zipB) {
+    return houseA === houseB && zipA === zipB;
+  }
+
+  // Fallback: full normalized token comparison
+  return tokensA.join('') === tokensB.join('');
 }

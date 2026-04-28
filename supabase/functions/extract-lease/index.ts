@@ -206,39 +206,67 @@ Deno.serve(async (req: Request) => {
       'If uncertain, use null and lower confidence.',
     ].join('\n');
 
-    const geminiResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          generationConfig: { responseMimeType: 'application/json', temperature: 0.1 },
-          contents: [
+    const geminiRequestBody = JSON.stringify({
+      generationConfig: { responseMimeType: 'application/json', temperature: 0.1 },
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            { text: prompt },
             {
-              role: 'user',
-              parts: [
-                { text: prompt },
-                {
-                  inlineData: {
-                    mimeType: 'application/pdf',
-                    data: base64,
-                  },
-                },
-              ],
+              inlineData: {
+                mimeType: 'application/pdf',
+                data: base64,
+              },
             },
           ],
-        }),
-      },
-    );
+        },
+      ],
+    });
+
+    const MAX_RETRIES = 3;
+    let geminiResponse!: Response;
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      geminiResponse = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: geminiRequestBody,
+        },
+      );
+
+      if (geminiResponse.status !== 429) break;
+
+      // Parse retryDelay from the response body when available, otherwise back off
+      let waitMs = Math.min(5_000 * 2 ** attempt, 60_000);
+      try {
+        const rateLimitBody = await geminiResponse.clone().json();
+        const retryDelaySec: number | undefined = rateLimitBody?.error?.details?.find(
+          (d: { '@type': string; retryDelay?: string }) =>
+            d['@type'] === 'type.googleapis.com/google.rpc.RetryInfo',
+        )?.retryDelay?.replace('s', '');
+        if (retryDelaySec) {
+          waitMs = Math.min(parseFloat(retryDelaySec) * 1_000 + 500, 65_000);
+        }
+      } catch { /* ignore parse errors */ }
+
+      console.warn(`Gemini 429 on attempt ${attempt + 1}; retrying in ${waitMs}ms`);
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
+    }
 
     if (!geminiResponse.ok) {
       const details = await geminiResponse.text();
       console.error('Gemini extract-lease error:', details);
+      const userMessage =
+        geminiResponse.status === 429
+          ? 'AI provider rate limit reached. Please wait a moment and try again.'
+          : 'Failed to extract lease data via provider';
       return await failureResponse(
         adminClient,
         draftId,
         startedAt,
-        'Failed to extract lease data via provider',
+        userMessage,
         502,
         GEMINI_MODEL,
         details,

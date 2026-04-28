@@ -8,6 +8,7 @@
 | **GitHub**         | [github.com/DarenTx/dhh](https://github.com/DarenTx/dhh)                                          |
 | **Supabase**       | [vmzmwdqnnnojzrjpdlnj](https://supabase.com/dashboard/project/vmzmwdqnnnojzrjpdlnj)               |
 | **Google Console** | [dahl-heritage-homes](https://console.cloud.google.com/auth/overview?project=dahl-heritage-homes) |
+| **Gemini AI Studio** | [dahl-heritage-homes](https://aistudio.google.com/rate-limit?project=dahl-heritage-homes&timeRange=last-28-days) |
 
 ## Description
 

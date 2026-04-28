@@ -154,14 +154,24 @@ const TABS: { id: TabId; label: string; managerOnly?: boolean }[] = [
       color: #718096;
     }
 
+    .overview-row {
+      display: flex;
+      gap: 1rem;
+      align-items: flex-start;
+      margin-bottom: 1.25rem;
+      flex-wrap: wrap;
+    }
+
     .overview-summary {
       background: #fff;
       border: 1px solid #e2e8f0;
-      border-radius: 1rem;
-      padding: 1rem;
+      border-radius: 0.75rem;
+      padding: 1.25rem;
       display: grid;
       gap: 0.875rem;
-      margin-bottom: 1.25rem;
+      flex: 1 1 220px;
+      max-width: 320px;
+      min-width: 0;
     }
 
     .hero-stat-label {
@@ -429,6 +439,54 @@ const TABS: { id: TabId; label: string; managerOnly?: boolean }[] = [
       background: #111827;
     }
 
+
+
+    .overview-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      margin-bottom: 0.25rem;
+    }
+
+    .overview-tenants {
+      margin-top: 0.75rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.375rem;
+    }
+
+    .overview-tenant-row {
+      display: flex;
+      flex-direction: column;
+      gap: 0.125rem;
+      font-size: 0.9375rem;
+      color: #2d3748;
+    }
+
+    .overview-tenant-meta {
+      font-size: 0.8125rem;
+      color: #718096;
+    }
+
+    .btn-ghost {
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+      padding: 0.25rem 0.6rem;
+      background: none;
+      border: 1px solid #e2e8f0;
+      border-radius: 0.375rem;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      color: #4a5568;
+      cursor: pointer;
+
+      &:hover {
+        background: #f7fafc;
+      }
+    }
+
     @media (max-width: 820px) {
       .header-main {
         width: 100%;
@@ -520,7 +578,97 @@ const TABS: { id: TabId; label: string; managerOnly?: boolean }[] = [
       <div class="tab-content">
         @switch (activeTab()) {
           @case ('overview') {
+            <div class="overview-row">
+            <!-- Card 1: Tenants -->
             <section class="overview-summary">
+              <p class="hero-stat-label" style="margin:0">Tenants</p>
+              @if (tenantsLoading() || leasesLoading()) {
+                <p class="loading" style="margin:0">Loading…</p>
+              } @else if (tenants().length > 0) {
+                <div class="overview-tenants">
+                  @for (tenant of tenants(); track tenant.id) {
+                    <div class="overview-tenant-row">
+                      <span>{{ tenant.first_name }} {{ tenant.last_name }}</span>
+                      @if (canViewPII()) {
+                        @if (tenant.email) {
+                          <span class="overview-tenant-meta">{{ tenant.email }}</span>
+                        }
+                        @if (tenant.phone) {
+                          <span class="overview-tenant-meta">{{ tenant.phone }}</span>
+                        }
+                      }
+                    </div>
+                  }
+                </div>
+              } @else {
+                <p style="margin:0;color:#a0aec0;font-size:0.9375rem">No tenants on record</p>
+              }
+            </section>
+
+            <!-- Card 2: Active lease -->
+            <section class="overview-summary">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:0.5rem">
+                <p class="hero-stat-label" style="margin:0">Active lease</p>
+                @if (activeLease() && canManage()) {
+                  <button
+                    class="btn-primary"
+                    style="padding:0.375rem 0.75rem;font-size:0.8125rem;flex-shrink:0"
+                    (click)="editLease(activeLease()!)"
+                  >
+                    <ng-icon name="heroPencilSquare" size="14" />
+                    Edit
+                  </button>
+                }
+              </div>
+              @if (leasesLoading()) {
+                <p class="loading" style="margin:0">Loading…</p>
+              } @else if (activeLease()) {
+                <div class="overview-grid">
+                  <div>
+                    <p class="detail-label">Start date</p>
+                    <p class="detail-value">{{ activeLease()!.start_date | date: 'mediumDate' }}</p>
+                  </div>
+                  @if (activeLease()!.end_date) {
+                    <div>
+                      <p class="detail-label">End date</p>
+                      <p class="detail-value">{{ activeLease()!.end_date | date: 'mediumDate' }}</p>
+                    </div>
+                  }
+                  <div>
+                    <p class="detail-label">Monthly rent</p>
+                    <p class="detail-value">{{ activeLease()!.monthly_rent | currency }}</p>
+                  </div>
+                  <div>
+                    <p class="detail-label">Security deposit</p>
+                    <p class="detail-value">{{ activeLease()!.security_deposit | currency }}</p>
+                  </div>
+                </div>
+                @if (leaseDocumentLinks()[activeLease()!.id]) {
+                  <a
+                    class="doc-link"
+                    [href]="leaseDocumentLinks()[activeLease()!.id]"
+                    target="_blank"
+                    rel="noopener"
+                    style="margin-top:0.25rem"
+                  >
+                    <ng-icon name="heroDocument" size="14" />
+                    View lease document
+                  </a>
+                }
+              } @else {
+                <p style="margin:0;color:#a0aec0;font-size:0.9375rem">No active lease</p>
+                @if (canManage()) {
+                  <button class="btn-primary" style="margin-top:0.5rem" (click)="startNewTenancy()">
+                    <ng-icon name="heroPlus" size="16" />
+                    Start New Tenancy
+                  </button>
+                }
+              }
+            </section>
+
+            <!-- Card 2: Property profile -->
+            <section class="overview-summary">
+
               <div>
                 <p class="hero-stat-label">Latest market value</p>
                 <p class="hero-stat-value">
@@ -560,15 +708,7 @@ const TABS: { id: TabId; label: string; managerOnly?: boolean }[] = [
                 </div>
               }
             </section>
-
-            @if (!property()!.isOccupied && canManage()) {
-              <div style="margin-top: 1.5rem;">
-                <button class="btn-primary" (click)="startNewTenancy()">
-                  <ng-icon name="heroPlus" size="16" />
-                  Start New Tenancy
-                </button>
-              </div>
-            }
+            </div>
           }
 
           @case ('leases') {
@@ -899,6 +1039,8 @@ export class PropertyDetailPage implements OnInit {
       .sort((a, b) => b.total - a.total)
       .slice(0, 3);
   });
+
+  readonly activeLease = computed(() => this.leases().find((l) => l.status === 'active') ?? null);
 
   readonly showPropertyForm = signal(false);
   readonly showLeaseForm = signal(false);

@@ -11,12 +11,6 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Lease, LeaseService, CreateLeaseData } from '../../../core/services/lease.service';
 import { StorageService } from '../../../core/services/storage.service';
 
-const STATUS_OPTIONS: { value: Lease['status']; label: string }[] = [
-  { value: 'active', label: 'Active' },
-  { value: 'expired', label: 'Expired' },
-  { value: 'terminated', label: 'Terminated' },
-];
-
 @Component({
   selector: 'app-lease-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -70,6 +64,27 @@ const STATUS_OPTIONS: { value: Lease['status']; label: string }[] = [
     input[type='file'] {
       padding: 0.45rem;
       border-style: dashed;
+    }
+
+    .status-toggle {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.9375rem;
+      color: #2d3748;
+      cursor: pointer;
+      user-select: none;
+
+      input[type='checkbox'] {
+        width: 1rem;
+        height: 1rem;
+        flex-shrink: 0;
+        cursor: pointer;
+        padding: 0;
+        border: none;
+        background: none;
+        box-shadow: none;
+      }
     }
 
     .error {
@@ -173,12 +188,11 @@ const STATUS_OPTIONS: { value: Lease['status']; label: string }[] = [
         </div>
 
         <div class="form-group">
-          <label for="status">Status</label>
-          <select id="status" formControlName="status">
-            @for (s of statusOptions; track s.value) {
-              <option [value]="s.value">{{ s.label }}</option>
-            }
-          </select>
+          <label>Status</label>
+          <label class="status-toggle">
+            <input type="checkbox" formControlName="status" />
+            Active
+          </label>
         </div>
 
         <div class="form-group full-width">
@@ -189,7 +203,6 @@ const STATUS_OPTIONS: { value: Lease['status']; label: string }[] = [
             accept="application/pdf,.pdf"
             (change)="onDocumentSelected($event)"
           />
-          <p class="field-hint">Upload a PDF lease document.</p>
           @if (selectedDocumentName()) {
             <p class="field-hint">Selected file: {{ selectedDocumentName() }}</p>
           }
@@ -220,7 +233,6 @@ export class LeaseFormComponent implements OnInit {
   readonly saved = output<Lease>();
   readonly cancelled = output<void>();
 
-  readonly statusOptions = STATUS_OPTIONS;
   readonly saving = signal(false);
   readonly serverError = signal<string | null>(null);
   readonly selectedDocumentName = signal<string | null>(null);
@@ -236,7 +248,7 @@ export class LeaseFormComponent implements OnInit {
     end_date: [''],
     monthly_rent: [null as number | null, Validators.required],
     security_deposit: [null as number | null, Validators.required],
-    status: ['active' as Lease['status']],
+    status: [true],
     document_url: [''],
   });
 
@@ -248,7 +260,7 @@ export class LeaseFormComponent implements OnInit {
         end_date: l.end_date ?? '',
         monthly_rent: l.monthly_rent,
         security_deposit: l.security_deposit,
-        status: l.status,
+        status: l.status === 'active',
         document_url: l.document_url ?? '',
       });
 
@@ -293,7 +305,7 @@ export class LeaseFormComponent implements OnInit {
       end_date: raw.end_date || null,
       monthly_rent: raw.monthly_rent!,
       security_deposit: raw.security_deposit!,
-      status: raw.status!,
+      status: (raw.status ? 'active' : 'inactive') as Lease['status'],
       document_url: raw.document_url || null,
     };
 

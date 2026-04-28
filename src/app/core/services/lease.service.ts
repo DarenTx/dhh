@@ -11,7 +11,7 @@ export interface Lease {
   monthly_rent: number;
   security_deposit: number;
   document_url: string | null;
-  status: 'active' | 'expired' | 'terminated';
+  status: 'active' | 'inactive';
   is_active: boolean;
   created_by: string | null;
   created_at: string;
@@ -114,7 +114,7 @@ export class LeaseService {
     return from(
       this.supabase
         .from('leases')
-        .update({ is_active: false, status: 'terminated' })
+        .update({ is_active: false, status: 'inactive' })
         .eq('id', id)
         .then(({ error }) => {
           if (error) throw error;
