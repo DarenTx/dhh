@@ -23,7 +23,7 @@ import { ExpenseService, ExpenseWithCategory } from '../../../core/services/expe
 import { NotesSectionComponent } from '../../../shared/components/notes-section/notes-section.component';
 import { PropertyFormComponent } from '../property-form/property-form.component';
 import { LeaseFormComponent } from '../lease-form/lease-form.component';
-import { TenantFormComponent } from '../tenant-form/tenant-form.component';
+import { LeaseTenantFormComponent } from '../lease-tenant-form/lease-tenant-form.component';
 import { NewTenancyWizardComponent } from '../new-tenancy-wizard/new-tenancy-wizard.component';
 import { MarketValueFormComponent } from '../market-value-form/market-value-form.component';
 import {
@@ -32,12 +32,11 @@ import {
 } from '../../../core/services/property-market-value.service';
 import { StorageService } from '../../../core/services/storage.service';
 
-type TabId = 'overview' | 'leases' | 'tenants' | 'notes' | 'expenses' | 'market-values';
+type TabId = 'overview' | 'leases' | 'notes' | 'expenses' | 'market-values';
 
 const TABS: { id: TabId; label: string; managerOnly?: boolean }[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'leases', label: 'Leases' },
-  { id: 'tenants', label: 'Tenants' },
   { id: 'notes', label: 'Notes' },
   { id: 'expenses', label: 'Expenses', managerOnly: true },
   { id: 'market-values', label: 'Market Values' },
@@ -56,7 +55,7 @@ const TABS: { id: TabId; label: string; managerOnly?: boolean }[] = [
     NotesSectionComponent,
     PropertyFormComponent,
     LeaseFormComponent,
-    TenantFormComponent,
+    LeaseTenantFormComponent,
     NewTenancyWizardComponent,
     MarketValueFormComponent,
   ],
@@ -439,8 +438,6 @@ const TABS: { id: TabId; label: string; managerOnly?: boolean }[] = [
       background: #111827;
     }
 
-
-
     .overview-card-header {
       display: flex;
       align-items: center;
@@ -579,135 +576,154 @@ const TABS: { id: TabId; label: string; managerOnly?: boolean }[] = [
         @switch (activeTab()) {
           @case ('overview') {
             <div class="overview-row">
-            <!-- Card 1: Tenants -->
-            <section class="overview-summary">
-              <p class="hero-stat-label" style="margin:0">Tenants</p>
-              @if (tenantsLoading() || leasesLoading()) {
-                <p class="loading" style="margin:0">Loading…</p>
-              } @else if (tenants().length > 0) {
-                <div class="overview-tenants">
-                  @for (tenant of tenants(); track tenant.id) {
-                    <div class="overview-tenant-row">
-                      <span>{{ tenant.first_name }} {{ tenant.last_name }}</span>
-                      @if (canViewPII()) {
-                        @if (tenant.email) {
-                          <span class="overview-tenant-meta">{{ tenant.email }}</span>
+              <!-- Card 1: Tenants -->
+              <section class="overview-summary">
+                <p class="hero-stat-label" style="margin:0">Tenants</p>
+                @if (tenantsLoading() || leasesLoading()) {
+                  <p class="loading" style="margin:0">Loading…</p>
+                } @else if (activeLeaseTenants().length > 0) {
+                  <div class="overview-tenants">
+                    @for (tenant of activeLeaseTenants(); track tenant.id) {
+                      <div class="overview-tenant-row">
+                        <span>{{ tenant.first_name }} {{ tenant.last_name }}</span>
+                        @if (canViewPII()) {
+                          @if (tenant.email) {
+                            <span class="overview-tenant-meta">{{ tenant.email }}</span>
+                          }
+                          @if (tenant.phone) {
+                            <span class="overview-tenant-meta">{{ tenant.phone }}</span>
+                          }
                         }
-                        @if (tenant.phone) {
-                          <span class="overview-tenant-meta">{{ tenant.phone }}</span>
-                        }
-                      }
+                      </div>
+                    }
+                  </div>
+                } @else {
+                  <p style="margin:0;color:#a0aec0;font-size:0.9375rem">No tenants on record</p>
+                }
+              </section>
+
+              <!-- Card 2: Active lease -->
+              <section class="overview-summary">
+                <div
+                  style="display:flex;align-items:center;justify-content:space-between;gap:0.5rem"
+                >
+                  <p class="hero-stat-label" style="margin:0">Active lease</p>
+                  @if (activeLease() && canManage()) {
+                    <div style="display:flex;gap:0.375rem;flex-shrink:0">
+                      <button
+                        class="btn-primary"
+                        style="padding:0.375rem 0.75rem;font-size:0.8125rem"
+                        (click)="editLease(activeLease()!)"
+                      >
+                        <ng-icon name="heroPencilSquare" size="14" />
+                        Edit
+                      </button>
+                      <button
+                        class="btn-ghost"
+                        style="padding:0.375rem 0.75rem;font-size:0.8125rem"
+                        (click)="editTenants(activeLease()!)"
+                      >
+                        <ng-icon name="heroUsers" size="14" />
+                        Tenants
+                      </button>
                     </div>
                   }
                 </div>
-              } @else {
-                <p style="margin:0;color:#a0aec0;font-size:0.9375rem">No tenants on record</p>
-              }
-            </section>
-
-            <!-- Card 2: Active lease -->
-            <section class="overview-summary">
-              <div style="display:flex;align-items:center;justify-content:space-between;gap:0.5rem">
-                <p class="hero-stat-label" style="margin:0">Active lease</p>
-                @if (activeLease() && canManage()) {
-                  <button
-                    class="btn-primary"
-                    style="padding:0.375rem 0.75rem;font-size:0.8125rem;flex-shrink:0"
-                    (click)="editLease(activeLease()!)"
-                  >
-                    <ng-icon name="heroPencilSquare" size="14" />
-                    Edit
-                  </button>
-                }
-              </div>
-              @if (leasesLoading()) {
-                <p class="loading" style="margin:0">Loading…</p>
-              } @else if (activeLease()) {
-                <div class="overview-grid">
-                  <div>
-                    <p class="detail-label">Start date</p>
-                    <p class="detail-value">{{ activeLease()!.start_date | date: 'mediumDate' }}</p>
-                  </div>
-                  @if (activeLease()!.end_date) {
+                @if (leasesLoading()) {
+                  <p class="loading" style="margin:0">Loading…</p>
+                } @else if (activeLease()) {
+                  <div class="overview-grid">
                     <div>
-                      <p class="detail-label">End date</p>
-                      <p class="detail-value">{{ activeLease()!.end_date | date: 'mediumDate' }}</p>
+                      <p class="detail-label">Start date</p>
+                      <p class="detail-value">
+                        {{ activeLease()!.start_date | date: 'mediumDate' }}
+                      </p>
                     </div>
-                  }
-                  <div>
-                    <p class="detail-label">Monthly rent</p>
-                    <p class="detail-value">{{ activeLease()!.monthly_rent | currency }}</p>
+                    @if (activeLease()!.end_date) {
+                      <div>
+                        <p class="detail-label">End date</p>
+                        <p class="detail-value">
+                          {{ activeLease()!.end_date | date: 'mediumDate' }}
+                        </p>
+                      </div>
+                    }
+                    <div>
+                      <p class="detail-label">Monthly rent</p>
+                      <p class="detail-value">{{ activeLease()!.monthly_rent | currency }}</p>
+                    </div>
+                    <div>
+                      <p class="detail-label">Security deposit</p>
+                      <p class="detail-value">{{ activeLease()!.security_deposit | currency }}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p class="detail-label">Security deposit</p>
-                    <p class="detail-value">{{ activeLease()!.security_deposit | currency }}</p>
-                  </div>
-                </div>
-                @if (leaseDocumentLinks()[activeLease()!.id]) {
-                  <a
-                    class="doc-link"
-                    [href]="leaseDocumentLinks()[activeLease()!.id]"
-                    target="_blank"
-                    rel="noopener"
-                    style="margin-top:0.25rem"
-                  >
-                    <ng-icon name="heroDocument" size="14" />
-                    View lease document
-                  </a>
-                }
-              } @else {
-                <p style="margin:0;color:#a0aec0;font-size:0.9375rem">No active lease</p>
-                @if (canManage()) {
-                  <button class="btn-primary" style="margin-top:0.5rem" (click)="startNewTenancy()">
-                    <ng-icon name="heroPlus" size="16" />
-                    Start New Tenancy
-                  </button>
-                }
-              }
-            </section>
-
-            <!-- Card 2: Property profile -->
-            <section class="overview-summary">
-
-              <div>
-                <p class="hero-stat-label">Latest market value</p>
-                <p class="hero-stat-value">
-                  @if (property()!.latestMarketValue) {
-                    {{
-                      property()!.latestMarketValue!.market_value
-                        | currency: 'USD' : 'symbol' : '1.0-0'
-                    }}
-                  } @else {
-                    No estimate yet
+                  @if (leaseDocumentLinks()[activeLease()!.id]) {
+                    <a
+                      class="doc-link"
+                      [href]="leaseDocumentLinks()[activeLease()!.id]"
+                      target="_blank"
+                      rel="noopener"
+                      style="margin-top:0.25rem"
+                    >
+                      <ng-icon name="heroDocument" size="14" />
+                      View lease document
+                    </a>
                   }
-                </p>
-                @if (property()!.latestMarketValue) {
-                  <p class="hero-stat-meta">
-                    {{ property()!.latestMarketValue!.source | titlecase }} on
-                    {{ property()!.latestMarketValue!.value_date | date: 'mediumDate' }}
-                  </p>
-                }
-              </div>
-
-              <div>
-                <p class="hero-stat-label">Property profile</p>
-                <p class="hero-stat-value">
-                  {{ property()!.bedrooms ?? '—' }} bd · {{ property()!.bathrooms ?? '—' }} ba ·
-                  @if (property()!.square_footage) {
-                    {{ property()!.square_footage | number }} sq ft
-                  } @else {
-                    — sq ft
+                } @else {
+                  <p style="margin:0;color:#a0aec0;font-size:0.9375rem">No active lease</p>
+                  @if (canManage()) {
+                    <button
+                      class="btn-primary"
+                      style="margin-top:0.5rem"
+                      (click)="startNewTenancy()"
+                    >
+                      <ng-icon name="heroPlus" size="16" />
+                      Start New Tenancy
+                    </button>
                   }
-                </p>
-              </div>
+                }
+              </section>
 
-              @if (property()!.year_built) {
+              <!-- Card 2: Property profile -->
+              <section class="overview-summary">
                 <div>
-                  <p class="hero-stat-label">Year built</p>
-                  <p class="hero-stat-value">{{ property()!.year_built }}</p>
+                  <p class="hero-stat-label">Latest market value</p>
+                  <p class="hero-stat-value">
+                    @if (property()!.latestMarketValue) {
+                      {{
+                        property()!.latestMarketValue!.market_value
+                          | currency: 'USD' : 'symbol' : '1.0-0'
+                      }}
+                    } @else {
+                      No estimate yet
+                    }
+                  </p>
+                  @if (property()!.latestMarketValue) {
+                    <p class="hero-stat-meta">
+                      {{ property()!.latestMarketValue!.source | titlecase }} on
+                      {{ property()!.latestMarketValue!.value_date | date: 'mediumDate' }}
+                    </p>
+                  }
                 </div>
-              }
-            </section>
+
+                <div>
+                  <p class="hero-stat-label">Property profile</p>
+                  <p class="hero-stat-value">
+                    {{ property()!.bedrooms ?? '—' }} bd · {{ property()!.bathrooms ?? '—' }} ba ·
+                    @if (property()!.square_footage) {
+                      {{ property()!.square_footage | number }} sq ft
+                    } @else {
+                      — sq ft
+                    }
+                  </p>
+                </div>
+
+                @if (property()!.year_built) {
+                  <div>
+                    <p class="hero-stat-label">Year built</p>
+                    <p class="hero-stat-value">{{ property()!.year_built }}</p>
+                  </div>
+                }
+              </section>
             </div>
           }
 
@@ -736,8 +752,31 @@ const TABS: { id: TabId; label: string; managerOnly?: boolean }[] = [
                     <span>Rent: {{ lease.monthly_rent | currency }}</span>
                     <span>Deposit: {{ lease.security_deposit | currency }}</span>
                   </div>
+
+                  <!-- Tenants for this lease -->
+                  <div style="margin-top:0.75rem">
+                    <p
+                      style="font-size:0.75rem;font-weight:600;color:#718096;text-transform:uppercase;letter-spacing:0.04em;margin:0 0 0.375rem"
+                    >
+                      Tenants
+                    </p>
+                    @if (tenantsLoading()) {
+                      <p style="font-size:0.875rem;color:#a0aec0;margin:0">Loading…</p>
+                    } @else if ((leaseTenants()[lease.id]?.length ?? 0) === 0) {
+                      <p style="font-size:0.875rem;color:#a0aec0;margin:0">None</p>
+                    } @else {
+                      <div style="display:flex;flex-direction:column;gap:0.125rem">
+                        @for (t of leaseTenants()[lease.id]; track t.id) {
+                          <span style="font-size:0.9375rem;color:#2d3748"
+                            >{{ t.first_name }} {{ t.last_name }}</span
+                          >
+                        }
+                      </div>
+                    }
+                  </div>
+
                   <div
-                    style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;"
+                    style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-top:0.75rem"
                   >
                     @if (leaseDocumentLinks()[lease.id]) {
                       <a
@@ -749,49 +788,29 @@ const TABS: { id: TabId; label: string; managerOnly?: boolean }[] = [
                         <ng-icon name="heroDocument" size="14" />
                         View lease document
                       </a>
+                    } @else {
+                      <span></span>
                     }
 
                     @if (canManage()) {
-                      <button
-                        class="btn-primary"
-                        style="padding:0.375rem 0.75rem;font-size:0.8125rem;flex-shrink:0"
-                        (click)="editLease(lease)"
-                      >
-                        <ng-icon name="heroPencilSquare" size="14" />
-                        Edit
-                      </button>
-                    }
-                  </div>
-                </div>
-              }
-            }
-          }
-
-          @case ('tenants') {
-            @if (canManage()) {
-              <div class="action-bar">
-                <button class="btn-primary" (click)="showTenantForm.set(true)">
-                  <ng-icon name="heroPlus" size="16" />
-                  Add tenant
-                </button>
-              </div>
-            }
-            @if (tenantsLoading()) {
-              <p class="loading">Loading tenants…</p>
-            } @else if (tenants().length === 0) {
-              <p class="empty">No tenants on record.</p>
-            } @else {
-              @for (tenant of tenants(); track tenant.id) {
-                <div class="tenant-card">
-                  <h3>{{ tenant.first_name }} {{ tenant.last_name }}</h3>
-                  <div class="tenant-meta">
-                    @if (canViewPII()) {
-                      @if (tenant.email) {
-                        <span>{{ tenant.email }}</span>
-                      }
-                      @if (tenant.phone) {
-                        <span>{{ tenant.phone }}</span>
-                      }
+                      <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+                        <button
+                          class="btn-primary"
+                          style="padding:0.375rem 0.75rem;font-size:0.8125rem"
+                          (click)="editLease(lease)"
+                        >
+                          <ng-icon name="heroPencilSquare" size="14" />
+                          Edit Lease
+                        </button>
+                        <button
+                          class="btn-ghost"
+                          style="padding:0.375rem 0.75rem;font-size:0.8125rem"
+                          (click)="editTenants(lease)"
+                        >
+                          <ng-icon name="heroUsers" size="14" />
+                          Edit Tenants
+                        </button>
+                      </div>
                     }
                   </div>
                 </div>
@@ -924,14 +943,15 @@ const TABS: { id: TabId; label: string; managerOnly?: boolean }[] = [
       </div>
     }
 
-    <!-- Add tenant modal -->
-    @if (showTenantForm()) {
-      <div class="modal-backdrop" (click)="showTenantForm.set(false)">
+    <!-- Manage lease tenants modal -->
+    @if (showLeaseTenantForm() && editingLeaseTenants()) {
+      <div class="modal-backdrop" (click)="closeLeaseTenantForm()">
         <div class="modal" (click)="$event.stopPropagation()">
-          <h2>Add tenant</h2>
-          <app-tenant-form
-            (saved)="onTenantSaved($event)"
-            (cancelled)="showTenantForm.set(false)"
+          <h2>Manage tenants — {{ editingLeaseTenants()!.status | titlecase }} lease</h2>
+          <app-lease-tenant-form
+            [lease]="editingLeaseTenants()!"
+            (done)="closeLeaseTenantForm()"
+            (changed)="onLeaseTenantChanged(editingLeaseTenants()!, $event)"
           />
         </div>
       </div>
@@ -1014,8 +1034,12 @@ export class PropertyDetailPage implements OnInit {
   readonly leasesLoading = signal(false);
   readonly leaseDocumentLinks = signal<Record<string, string>>({});
 
-  readonly tenants = signal<Tenant[]>([]);
+  readonly leaseTenants = signal<Record<string, Tenant[]>>({});
   readonly tenantsLoading = signal(false);
+
+  readonly activeLeaseTenants = computed(() =>
+    this.activeLease() ? (this.leaseTenants()[this.activeLease()!.id] ?? []) : [],
+  );
 
   readonly propertyExpenses = signal<ExpenseWithCategory[]>([]);
   readonly expensesLoading = signal(false);
@@ -1044,7 +1068,8 @@ export class PropertyDetailPage implements OnInit {
 
   readonly showPropertyForm = signal(false);
   readonly showLeaseForm = signal(false);
-  readonly showTenantForm = signal(false);
+  readonly showLeaseTenantForm = signal(false);
+  readonly editingLeaseTenants = signal<Lease | null>(null);
   readonly showWizard = signal(false);
   readonly showMarketValueForm = signal(false);
   readonly showImagePreview = signal(false);
@@ -1069,7 +1094,6 @@ export class PropertyDetailPage implements OnInit {
     const id = this.route.snapshot.paramMap.get('id')!;
     this.loadProperty(id);
     this.loadLeases(id);
-    this.loadTenants(id);
     this.loadMarketValues(id);
     if (this.canManage()) {
       this.loadExpenses(id);
@@ -1108,8 +1132,27 @@ export class PropertyDetailPage implements OnInit {
         this.leases.set(leases);
         this.loadLeaseDocumentLinks(leases);
         this.leasesLoading.set(false);
+        this.loadAllLeaseTenants(leases);
       },
       error: () => this.leasesLoading.set(false),
+    });
+  }
+
+  private loadAllLeaseTenants(leases: Lease[]): void {
+    if (leases.length === 0) {
+      this.leaseTenants.set({});
+      return;
+    }
+    this.tenantsLoading.set(true);
+    const observables = Object.fromEntries(
+      leases.map((lease) => [lease.id, this.tenantService.getTenantsForLease(lease.id)]),
+    );
+    forkJoin(observables).subscribe({
+      next: (result) => {
+        this.leaseTenants.set(result as Record<string, Tenant[]>);
+        this.tenantsLoading.set(false);
+      },
+      error: () => this.tenantsLoading.set(false),
     });
   }
 
@@ -1145,29 +1188,6 @@ export class PropertyDetailPage implements OnInit {
     });
   }
 
-  private loadTenants(propertyId: string): void {
-    this.tenantsLoading.set(true);
-    // Get all leases for the property, then fetch tenants for each
-    this.leaseService.getLeasesForProperty(propertyId).subscribe({
-      next: (leases) => {
-        if (leases.length === 0) {
-          this.tenants.set([]);
-          this.tenantsLoading.set(false);
-          return;
-        }
-        const activeLease = leases.find((l) => l.status === 'active') ?? leases[0];
-        this.tenantService.getTenantsForLease(activeLease.id).subscribe({
-          next: (tenants) => {
-            this.tenants.set(tenants);
-            this.tenantsLoading.set(false);
-          },
-          error: () => this.tenantsLoading.set(false),
-        });
-      },
-      error: () => this.tenantsLoading.set(false),
-    });
-  }
-
   editProperty(): void {
     this.showPropertyForm.set(true);
   }
@@ -1185,6 +1205,20 @@ export class PropertyDetailPage implements OnInit {
   closeLeaseForm(): void {
     this.showLeaseForm.set(false);
     this.editingLease.set(null);
+  }
+
+  editTenants(lease: Lease): void {
+    this.editingLeaseTenants.set(lease);
+    this.showLeaseTenantForm.set(true);
+  }
+
+  closeLeaseTenantForm(): void {
+    this.showLeaseTenantForm.set(false);
+    this.editingLeaseTenants.set(null);
+  }
+
+  onLeaseTenantChanged(lease: Lease, tenants: Tenant[]): void {
+    this.leaseTenants.update((prev) => ({ ...prev, [lease.id]: tenants }));
   }
 
   openImagePreview(): void {
@@ -1226,14 +1260,9 @@ export class PropertyDetailPage implements OnInit {
     this.closeLeaseForm();
   }
 
-  onTenantSaved(tenant: Tenant): void {
-    this.tenants.update((prev) => [...prev, tenant]);
-    this.showTenantForm.set(false);
-  }
-
   onWizardSaved(result: { lease: Lease; tenants: Tenant[] }): void {
     this.leases.update((prev) => [result.lease, ...prev]);
-    this.tenants.update((prev) => [...prev, ...result.tenants]);
+    this.leaseTenants.update((prev) => ({ ...prev, [result.lease.id]: result.tenants }));
     this.property.update((p) => (p ? { ...p, isOccupied: true } : p));
     this.showWizard.set(false);
     this.activeTab.set('leases');

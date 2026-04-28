@@ -9,8 +9,7 @@ export interface NavItem {
 
 export const NAV_ITEMS: NavItem[] = [
   { label: 'Dashboard', path: '/dashboard', icon: 'heroHome', minRole: 'all', bottomNav: true },
-  { label: 'Properties', path: '/properties', icon: 'heroBuildingOffice2', minRole: 'all' },
-  { label: 'Tenants', path: '/tenants', icon: 'heroUsers', minRole: 'all' },
+  { label: 'Properties', path: '/properties', icon: 'heroBuildingOffice2', minRole: 'all', bottomNav: true },
   {
     label: 'Expenses',
     path: '/expenses',
@@ -32,7 +31,6 @@ export const NAV_ITEMS: NavItem[] = [
     minRole: 'manager',
     bottomNav: true,
   },
-  { label: 'Settings', path: '/settings', icon: 'heroCog6Tooth', minRole: 'manager' },
   { label: 'Admin', path: '/admin', icon: 'heroUserGroup', minRole: 'admin' },
   {
     label: 'Audit',
@@ -40,4 +38,5 @@ export const NAV_ITEMS: NavItem[] = [
     icon: 'heroClipboardDocumentList',
     minRole: 'all',
   },
+  { label: 'Settings', path: '/settings', icon: 'heroCog6Tooth', minRole: 'manager' },
 ];
