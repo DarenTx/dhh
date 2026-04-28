@@ -604,7 +604,6 @@ export class ExpenseFormComponent implements OnInit {
   readonly extractionError = signal<string | null>(null);
   readonly extractionWarnings = signal<string[]>([]);
   readonly reviewConfirmed = signal(false);
-  readonly extractionDone = signal(false);
 
   readonly selectedCategoryName = computed(
     () =>
@@ -764,7 +763,6 @@ export class ExpenseFormComponent implements OnInit {
     const input = event.target as HTMLInputElement;
     if (!input.files) return;
     this.pendingFiles.update((prev) => [...prev, ...Array.from(input.files!)]);
-    this.extractionDone.set(false);
     this.extractionError.set(null);
     this.extractionWarnings.set([]);
     input.value = '';
@@ -772,7 +770,7 @@ export class ExpenseFormComponent implements OnInit {
 
   removeFile(index: number): void {
     this.pendingFiles.update((prev) => prev.filter((_, i) => i !== index));
-    this.extractionDone.set(false);
+    this.extractionError.set(null);
   }
 
   toggleReviewConfirmed(event: Event): void {
@@ -781,51 +779,7 @@ export class ExpenseFormComponent implements OnInit {
   }
 
   runAiExtraction(): void {
-    const file = this.pendingFiles()[0];
-    if (!file || this.extractingAi()) return;
-
-    this.extractingAi.set(true);
-    this.extractionError.set(null);
-    this.extractionWarnings.set([]);
-    this.extractionDone.set(false);
-
-    this.evidenceService.uploadDraftEvidence(file).subscribe({
-      next: (draftPath) => {
-        this.aiExtractionService
-          .extractExpense({
-            storage_bucket: 'expense-evidence',
-            storage_path: draftPath,
-            property_id: this.form.get('property_id')?.value || undefined,
-          })
-          .subscribe({
-            next: (result) => {
-              this.extractionWarnings.set(result.warnings ?? []);
-              this.applyExpenseExtraction(result);
-              this.reviewConfirmed.set(false);
-              this.extractionDone.set(true);
-              this.extractingAi.set(false);
-              this.evidenceService.deleteStorageObject(draftPath).subscribe({
-                next: () => undefined,
-                error: () => undefined,
-              });
-            },
-            error: (err) => {
-              this.extractionError.set(err?.message ?? 'AI extraction failed.');
-              this.extractingAi.set(false);
-              this.evidenceService.deleteStorageObject(draftPath).subscribe({
-                next: () => undefined,
-                error: () => undefined,
-              });
-            },
-          });
-      },
-      error: (err) => {
-        this.extractionError.set(
-          err?.message ?? 'Failed to upload draft evidence for AI extraction.',
-        );
-        this.extractingAi.set(false);
-      },
-    });
+    // AI extraction is now triggered automatically from proceedFromUpload()
   }
 
   private applyExpenseExtraction(result: ExpenseExtractionResult): void {

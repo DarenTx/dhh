@@ -85,9 +85,18 @@ Deno.serve(async (req: Request) => {
       return errorResponse(401, 'Invalid caller token');
     }
 
-    const callerRole = callerUser.app_metadata?.role as string | undefined;
-    const isActive = callerUser.app_metadata?.is_active as boolean | undefined;
-    if (!isActive || !['admin', 'manager'].includes(callerRole ?? '')) {
+    // Query user_roles directly — getUser() returns raw_app_meta_data from auth.users
+    // which does NOT include claims injected by the custom_access_token_hook.
+    const adminClientForAuth = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+    const { data: userRole } = await adminClientForAuth
+      .from('user_roles')
+      .select('role, is_active')
+      .eq('user_id', callerUser.id)
+      .maybeSingle();
+
+    if (!userRole?.is_active || !['admin', 'manager'].includes(userRole?.role ?? '')) {
       return errorResponse(403, 'Only active admins or managers can extract receipt data');
     }
 
@@ -110,6 +119,18 @@ Deno.serve(async (req: Request) => {
     const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
       auth: { autoRefreshToken: false, persistSession: false },
     });
+
+    // Fetch allowed categories and subcategories to constrain the AI response
+    const { data: categoriesData } = await adminClient
+      .from('irs_expense_categories')
+      .select('name, expense_subcategories(name)')
+      .order('name');
+
+    type CategoryRow = { name: string; expense_subcategories: { name: string }[] };
+    const categoryList = ((categoriesData as CategoryRow[]) ?? []).map((cat) => ({
+      category: cat.name,
+      subcategories: (cat.expense_subcategories ?? []).map((s) => s.name).sort(),
+    }));
 
     const draftId = await ensureDraft(adminClient, {
       draftId: payload.extraction_draft_id,
@@ -152,11 +173,21 @@ Deno.serve(async (req: Request) => {
     const bytes = new Uint8Array(await fileBlob.arrayBuffer());
     const base64 = toBase64(bytes);
 
+    const categoryListJson = JSON.stringify(categoryList, null, 2);
+
     const prompt = [
       'Extract expense data from this receipt and return JSON only.',
       'Return this exact shape:',
       '{"date":"YYYY-MM-DD|null","amount":number|null,"description":string|null,"vendor":string|null,"category_name":string|null,"subcategory_name":string|null,"confidence_by_field":{"date":0-1,"amount":0-1,"description":0-1,"vendor":0-1,"category_name":0-1,"subcategory_name":0-1},"warnings":string[]}',
-      'If uncertain, use null and lower confidence.',
+      '',
+      'IMPORTANT — category and subcategory rules:',
+      'You MUST use ONLY the exact category and subcategory names from the list below.',
+      'Copy the name character-for-character. Do NOT invent, paraphrase, or abbreviate names.',
+      'If no category fits, return null for both category_name and subcategory_name.',
+      'If a category fits but no subcategory fits, return the category and null for subcategory_name.',
+      '',
+      'Allowed categories and subcategories:',
+      categoryListJson,
     ].join('\n');
 
     const geminiResponse = await fetch(
@@ -289,7 +320,7 @@ Deno.serve(async (req: Request) => {
       response_payload: response,
     });
 
-    await adminClient.rpc('run_ai_extraction_retention_cleanup').catch(() => undefined);
+    await adminClient.rpc('run_ai_extraction_retention_cleanup');
 
     return new Response(JSON.stringify(response), {
       status: 200,
@@ -363,21 +394,17 @@ async function failureResponse(
   await adminClient
     .from('ai_extraction_drafts')
     .update({ status: 'failed', error_message: errorMessage ?? message })
-    .eq('id', draftId)
-    .catch(() => undefined);
+    .eq('id', draftId);
 
-  await adminClient
-    .from('ai_extraction_attempts')
-    .insert({
-      draft_id: draftId,
-      function_name: 'extract-expense',
-      provider: 'gemini',
-      model: GEMINI_MODEL,
-      status: 'error',
-      latency_ms: Date.now() - startedAt,
-      error_message: errorMessage ?? message,
-    })
-    .catch(() => undefined);
+  await adminClient.from('ai_extraction_attempts').insert({
+    draft_id: draftId,
+    function_name: 'extract-expense',
+    provider: 'gemini',
+    model: GEMINI_MODEL,
+    status: 'error',
+    latency_ms: Date.now() - startedAt,
+    error_message: errorMessage ?? message,
+  });
 
   return errorResponse(status, message);
 }
