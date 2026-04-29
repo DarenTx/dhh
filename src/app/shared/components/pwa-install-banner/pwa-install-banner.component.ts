@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
-import { PwaInstallService } from '../../core/services/pwa-install.service';
+import { PwaInstallService } from '../../../core/services/pwa-install.service';
 
 @Component({
   selector: 'app-pwa-install-banner',
