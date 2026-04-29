@@ -17,7 +17,7 @@ const mockRow: AuditRow = {
   new_data: { email: 'a@b.com', role: 'view_only' },
   performed_by: 'user-1',
   performed_at: '2024-06-01T12:00:00Z',
-  performer_email: 'admin@dahlheritagehomes.com',
+  performer_display: 'Daren Dahl',
 };
 
 function makeAuditService(result: AuditResult = { rows: [mockRow], totalCount: 1 }) {

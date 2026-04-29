@@ -576,99 +576,83 @@ const TABS: { id: TabId; label: string; managerOnly?: boolean }[] = [
         @switch (activeTab()) {
           @case ('overview') {
             <div class="overview-row">
-              <!-- Card 1: Tenants -->
-              <section class="overview-summary">
-                <p class="hero-stat-label" style="margin:0">Tenants</p>
-                @if (tenantsLoading() || leasesLoading()) {
+              <!-- Active lease -->
+              @if (leasesLoading() || tenantsLoading()) {
+                <div class="lease-card" style="flex:1 1 280px;max-width:400px;margin-bottom:0">
                   <p class="loading" style="margin:0">Loading…</p>
-                } @else if (activeLeaseTenants().length > 0) {
-                  <div class="overview-tenants">
-                    @for (tenant of activeLeaseTenants(); track tenant.id) {
-                      <div class="overview-tenant-row">
-                        <span>{{ tenant.first_name }} {{ tenant.last_name }}</span>
-                        @if (canViewPII()) {
-                          @if (tenant.email) {
-                            <span class="overview-tenant-meta">{{ tenant.email }}</span>
-                          }
-                          @if (tenant.phone) {
-                            <span class="overview-tenant-meta">{{ tenant.phone }}</span>
-                          }
+                </div>
+              } @else if (activeLease()) {
+                <div class="lease-card" style="flex:1 1 280px;max-width:400px;margin-bottom:0">
+                  <h3>Lease — {{ activeLease()!.status | titlecase }}</h3>
+                  <div class="lease-meta">
+                    <span>Start: {{ activeLease()!.start_date | date: 'mediumDate' }}</span>
+                    @if (activeLease()!.end_date) {
+                      <span>End: {{ activeLease()!.end_date | date: 'mediumDate' }}</span>
+                    }
+                    <span>Rent: {{ activeLease()!.monthly_rent | currency }}</span>
+                    <span>Deposit: {{ activeLease()!.security_deposit | currency }}</span>
+                  </div>
+
+                  <div style="margin-top:0.75rem">
+                    <p
+                      style="font-size:0.75rem;font-weight:600;color:#718096;text-transform:uppercase;letter-spacing:0.04em;margin:0 0 0.375rem"
+                    >
+                      Tenants
+                    </p>
+                    @if (activeLeaseTenants().length === 0) {
+                      <p style="font-size:0.875rem;color:#a0aec0;margin:0">None</p>
+                    } @else {
+                      <div style="display:flex;flex-direction:column;gap:0.125rem">
+                        @for (t of activeLeaseTenants(); track t.id) {
+                          <span style="font-size:0.9375rem;color:#2d3748"
+                            >{{ t.first_name }} {{ t.last_name }}</span
+                          >
                         }
                       </div>
                     }
                   </div>
-                } @else {
-                  <p style="margin:0;color:#a0aec0;font-size:0.9375rem">No tenants on record</p>
-                }
-              </section>
 
-              <!-- Card 2: Active lease -->
-              <section class="overview-summary">
-                <div
-                  style="display:flex;align-items:center;justify-content:space-between;gap:0.5rem"
-                >
-                  <p class="hero-stat-label" style="margin:0">Active lease</p>
-                  @if (activeLease() && canManage()) {
-                    <div style="display:flex;gap:0.375rem;flex-shrink:0">
-                      <button
-                        class="btn-primary"
-                        style="padding:0.375rem 0.75rem;font-size:0.8125rem"
-                        (click)="editLease(activeLease()!)"
+                  <div
+                    style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-top:0.75rem"
+                  >
+                    @if (leaseDocumentLinks()[activeLease()!.id]) {
+                      <a
+                        class="doc-link"
+                        [href]="leaseDocumentLinks()[activeLease()!.id]"
+                        target="_blank"
+                        rel="noopener"
                       >
-                        <ng-icon name="heroPencilSquare" size="14" />
-                        Edit
-                      </button>
-                      <button
-                        class="btn-ghost"
-                        style="padding:0.375rem 0.75rem;font-size:0.8125rem"
-                        (click)="editTenants(activeLease()!)"
-                      >
-                        <ng-icon name="heroUsers" size="14" />
-                        Tenants
-                      </button>
-                    </div>
-                  }
-                </div>
-                @if (leasesLoading()) {
-                  <p class="loading" style="margin:0">Loading…</p>
-                } @else if (activeLease()) {
-                  <div class="overview-grid">
-                    <div>
-                      <p class="detail-label">Start date</p>
-                      <p class="detail-value">
-                        {{ activeLease()!.start_date | date: 'mediumDate' }}
-                      </p>
-                    </div>
-                    @if (activeLease()!.end_date) {
-                      <div>
-                        <p class="detail-label">End date</p>
-                        <p class="detail-value">
-                          {{ activeLease()!.end_date | date: 'mediumDate' }}
-                        </p>
+                        <ng-icon name="heroDocument" size="14" />
+                        View lease document
+                      </a>
+                    } @else {
+                      <span></span>
+                    }
+
+                    @if (canManage()) {
+                      <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+                        <button
+                          class="btn-primary"
+                          style="padding:0.375rem 0.75rem;font-size:0.8125rem"
+                          (click)="editLease(activeLease()!)"
+                        >
+                          <ng-icon name="heroPencilSquare" size="14" />
+                          Edit Lease
+                        </button>
+                        <button
+                          class="btn-ghost"
+                          style="padding:0.375rem 0.75rem;font-size:0.8125rem"
+                          (click)="editTenants(activeLease()!)"
+                        >
+                          <ng-icon name="heroUsers" size="14" />
+                          Edit Tenants
+                        </button>
                       </div>
                     }
-                    <div>
-                      <p class="detail-label">Monthly rent</p>
-                      <p class="detail-value">{{ activeLease()!.monthly_rent | currency }}</p>
-                    </div>
-                    <div>
-                      <p class="detail-label">Security deposit</p>
-                      <p class="detail-value">{{ activeLease()!.security_deposit | currency }}</p>
-                    </div>
                   </div>
-                  @if (leaseDocumentLinks()[activeLease()!.id]) {
-                    <a
-                      class="doc-link"
-                      [href]="leaseDocumentLinks()[activeLease()!.id]"
-                      target="_blank"
-                      rel="noopener"
-                      style="margin-top:0.25rem"
-                    >
-                      <ng-icon name="heroDocument" size="14" />
-                      View lease document
-                    </a>
-                  }
-                } @else {
+                </div>
+              } @else {
+                <div class="lease-card" style="flex:1 1 280px;max-width:400px;margin-bottom:0">
                   <p style="margin:0;color:#a0aec0;font-size:0.9375rem">No active lease</p>
                   @if (canManage()) {
                     <button
@@ -680,8 +664,8 @@ const TABS: { id: TabId; label: string; managerOnly?: boolean }[] = [
                       Start New Tenancy
                     </button>
                   }
-                }
-              </section>
+                </div>
+              }
 
               <!-- Card 2: Property profile -->
               <section class="overview-summary">

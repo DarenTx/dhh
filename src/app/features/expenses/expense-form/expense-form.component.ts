@@ -500,13 +500,20 @@ type WizardStep = 1 | 2 | 3;
         </div>
 
         <div class="field">
-          <label for="property_id">Property (optional)</label>
-          <select id="property_id" formControlName="property_id">
-            <option value="">All / LLC-wide</option>
+          <label for="property_id">Property *</label>
+          <select
+            id="property_id"
+            formControlName="property_id"
+            [class.invalid]="form.get('property_id')?.touched && form.get('property_id')?.invalid"
+          >
+            <option value="">Select property…</option>
             @for (prop of properties(); track prop.id) {
               <option [value]="prop.id">{{ prop.address_line1 }}</option>
             }
           </select>
+          @if (form.get('property_id')?.touched && form.get('property_id')?.hasError('required')) {
+            <span class="error-msg">Property is required.</span>
+          }
         </div>
 
         @if (expenseFormError()) {
@@ -535,8 +542,6 @@ type WizardStep = 1 | 2 | 3;
           }
           @if (selectedPropertyName()) {
             <p>Property: {{ selectedPropertyName() }}</p>
-          } @else {
-            <p>Property: All / LLC-wide</p>
           }
         </div>
 
@@ -609,7 +614,7 @@ export class ExpenseFormComponent implements OnInit {
     description: new FormControl('', Validators.required),
     irs_category_id: new FormControl('', Validators.required),
     subcategory_id: new FormControl('', Validators.required),
-    property_id: new FormControl(''),
+    property_id: new FormControl('', Validators.required),
   });
 
   ngOnInit(): void {

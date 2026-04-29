@@ -8,6 +8,10 @@ export interface ApprovalRequirement {
   approvable_type: 'expense' | 'guaranteed_payment';
   approvable_id: string;
   approver_id: string;
+  approver_email: string | null;
+  approver_first_name: string | null;
+  approver_last_name: string | null;
+  approver_avatar_url: string | null;
   status: 'pending' | 'approved' | 'rejected';
   reason: string | null;
   responded_at: string | null;
@@ -69,6 +73,84 @@ export class ApprovalService {
         .eq('id', id)
         .then(({ error }) => {
           if (error) throw error;
+        }),
+    );
+  }
+
+  getApprovalsForExpense(expenseId: string): Observable<ApprovalRequirement[]> {
+    return from(
+      this.supabase
+        .from('approval_requirements')
+        .select('*')
+        .eq('approvable_type', 'expense')
+        .eq('approvable_id', expenseId)
+        .order('created_at', { ascending: true })
+        .then(async ({ data, error }) => {
+          if (error) throw error;
+          const rows = (data ?? []) as ApprovalRequirement[];
+          if (rows.length === 0) return rows;
+          const ids = [...new Set(rows.map((r) => r.approver_id))];
+          const { data: users } = await this.supabase
+            .from('user_roles')
+            .select('user_id, email, first_name, last_name, avatar_url')
+            .in('user_id', ids);
+          const emailMap = Object.fromEntries(
+            (users ?? []).map(
+              (u: {
+                user_id: string;
+                email: string;
+                first_name: string | null;
+                last_name: string | null;
+                avatar_url: string | null;
+              }) => [u.user_id, u],
+            ),
+          );
+          return rows.map((r) => ({
+            ...r,
+            approver_email: emailMap[r.approver_id]?.email ?? null,
+            approver_first_name: emailMap[r.approver_id]?.first_name ?? null,
+            approver_last_name: emailMap[r.approver_id]?.last_name ?? null,
+            approver_avatar_url: emailMap[r.approver_id]?.avatar_url ?? null,
+          }));
+        }),
+    );
+  }
+
+  getApprovalsForGP(gpId: string): Observable<ApprovalRequirement[]> {
+    return from(
+      this.supabase
+        .from('approval_requirements')
+        .select('*')
+        .eq('approvable_type', 'guaranteed_payment')
+        .eq('approvable_id', gpId)
+        .order('created_at', { ascending: true })
+        .then(async ({ data, error }) => {
+          if (error) throw error;
+          const rows = (data ?? []) as ApprovalRequirement[];
+          if (rows.length === 0) return rows;
+          const ids = [...new Set(rows.map((r) => r.approver_id))];
+          const { data: users } = await this.supabase
+            .from('user_roles')
+            .select('user_id, email, first_name, last_name, avatar_url')
+            .in('user_id', ids);
+          const emailMap = Object.fromEntries(
+            (users ?? []).map(
+              (u: {
+                user_id: string;
+                email: string;
+                first_name: string | null;
+                last_name: string | null;
+                avatar_url: string | null;
+              }) => [u.user_id, u],
+            ),
+          );
+          return rows.map((r) => ({
+            ...r,
+            approver_email: emailMap[r.approver_id]?.email ?? null,
+            approver_first_name: emailMap[r.approver_id]?.first_name ?? null,
+            approver_last_name: emailMap[r.approver_id]?.last_name ?? null,
+            approver_avatar_url: emailMap[r.approver_id]?.avatar_url ?? null,
+          }));
         }),
     );
   }

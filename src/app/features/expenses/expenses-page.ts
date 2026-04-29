@@ -140,6 +140,10 @@ interface MonthGroup {
       flex-direction: column;
       gap: 0.25rem;
     }
+    .expense-date {
+      font-size: 0.8125rem;
+      color: #718096;
+    }
     .expense-desc {
       font-size: 1rem;
       color: #2d3748;
@@ -253,7 +257,12 @@ interface MonthGroup {
           <div>
             <div class="month-header" [class.open]="grp.open" (click)="toggleMonth(grp)">
               <div class="month-info">
-                <ng-icon [name]="grp.open ? 'heroChevronDown' : 'heroChevronRight'" size="16" />
+                <ng-icon
+                  name="heroChevronRight"
+                  size="16"
+                  [style.transform]="grp.open ? 'rotate(90deg)' : ''"
+                  style="transition: transform 0.15s"
+                />
                 <span class="month-name">{{ grp.label }}</span>
                 <span class="month-count"
                   >{{ grp.expenses.length }} expense{{ grp.expenses.length === 1 ? '' : 's' }}</span
@@ -266,6 +275,7 @@ interface MonthGroup {
                 @for (expense of grp.expenses; track expense.id) {
                   <div class="expense-row" (click)="openDetail(expense.id)">
                     <div class="expense-left">
+                      <span class="expense-date">{{ expense.date }}</span>
                       <span class="expense-desc">{{ expense.description }}</span>
                       <span class="expense-sub">
                         {{ expense.irs_expense_categories?.name ?? '' }}
@@ -274,6 +284,8 @@ interface MonthGroup {
                         }
                         @if (expense.properties?.address_line1) {
                           · {{ expense.properties!.address_line1 }}
+                        } @else {
+                          · LLC-wide
                         }
                       </span>
                     </div>
@@ -311,9 +323,11 @@ export class ExpensesPage implements OnInit {
   readonly loading = signal(true);
   readonly showForm = signal(false);
   private readonly raw = signal<ExpenseWithCategory[]>([]);
+  private readonly openMonths = signal<Set<string>>(new Set<string>());
 
   readonly months = computed<MonthGroup[]>(() => {
     const expenses = this.raw();
+    const open = this.openMonths();
     const map = new Map<string, MonthGroup>();
     for (const e of expenses) {
       const d = new Date(e.date + 'T00:00:00');
@@ -325,18 +339,16 @@ export class ExpensesPage implements OnInit {
           label: d.toLocaleString('default', { month: 'long', year: 'numeric' }),
           expenses: [],
           total: 0,
-          open: false,
+          open: open.has(key),
         });
       }
       const grp = map.get(key)!;
       grp.expenses.push(e);
       grp.total += Number(e.amount);
     }
-    const groups = Array.from(map.values()).sort(
+    return Array.from(map.values()).sort(
       (a, b) => b.year * 100 + b.month - (a.year * 100 + a.month),
     );
-    if (groups.length > 0) groups[0].open = true;
-    return groups;
   });
 
   canManage(): boolean {
@@ -352,6 +364,12 @@ export class ExpensesPage implements OnInit {
     this.expenseService.getAllExpenses().subscribe({
       next: (rows) => {
         this.raw.set(rows);
+        // Auto-open the most recent month on first load (openMonths is empty)
+        if (rows.length > 0 && this.openMonths().size === 0) {
+          const d = new Date(rows[0].date + 'T00:00:00');
+          const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+          this.openMonths.set(new Set([key]));
+        }
         this.loading.set(false);
       },
       error: () => this.loading.set(false),
@@ -359,11 +377,16 @@ export class ExpensesPage implements OnInit {
   }
 
   toggleMonth(grp: MonthGroup): void {
-    this.months().forEach((g) => {
-      if (g === grp) g.open = !g.open;
+    const key = `${grp.year}-${String(grp.month).padStart(2, '0')}`;
+    this.openMonths.update((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
     });
-    // Force signal update by reassigning
-    this.raw.update((v) => [...v]);
   }
 
   openDetail(id: string): void {
@@ -374,6 +397,7 @@ export class ExpensesPage implements OnInit {
     this.showForm.set(false);
     this.loading.set(true);
     this.raw.set([]);
+    this.openMonths.set(new Set());
     this.loadAll();
   }
 }

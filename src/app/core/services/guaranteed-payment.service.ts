@@ -35,17 +35,19 @@ export class GuaranteedPaymentService {
     const start = new Date(year, month - 1, 1).toISOString().slice(0, 10);
     const end = new Date(year, month, 0).toISOString().slice(0, 10);
     return from(
-      this.supabase
-        .from('guaranteed_payments')
-        .select('*')
-        .eq('is_active', true)
-        .gte('work_date', start)
-        .lte('work_date', end)
-        .order('work_date', { ascending: false })
-        .then(({ data, error }) => {
-          if (error) throw error;
-          return (data ?? []) as GuaranteedPayment[];
-        }),
+      this.supabase.auth.getUser().then(async ({ data: { user } }) => {
+        if (!user) return [];
+        const { data, error } = await this.supabase
+          .from('guaranteed_payments')
+          .select('*')
+          .eq('is_active', true)
+          .eq('created_by', user.id)
+          .gte('work_date', start)
+          .lte('work_date', end)
+          .order('work_date', { ascending: false });
+        if (error) throw error;
+        return (data ?? []) as GuaranteedPayment[];
+      }),
     );
   }
 
@@ -95,6 +97,24 @@ export class GuaranteedPaymentService {
     );
   }
 
+  updatePayment(
+    id: string,
+    payload: UpdateGuaranteedPaymentPayload,
+  ): Observable<GuaranteedPayment> {
+    return from(
+      this.supabase
+        .from('guaranteed_payments')
+        .update(payload)
+        .eq('id', id)
+        .select()
+        .single()
+        .then(({ data, error }) => {
+          if (error) throw error;
+          return data as GuaranteedPayment;
+        }),
+    );
+  }
+
   retractPayment(id: string): Observable<void> {
     return from(
       this.supabase
@@ -107,21 +127,38 @@ export class GuaranteedPaymentService {
     );
   }
 
+  getRecentPayments(limit = 5): Observable<GuaranteedPayment[]> {
+    return from(
+      this.supabase
+        .from('guaranteed_payments')
+        .select('*')
+        .eq('is_active', true)
+        .order('created_at', { ascending: false })
+        .limit(limit)
+        .then(({ data, error }) => {
+          if (error) throw error;
+          return (data ?? []) as GuaranteedPayment[];
+        }),
+    );
+  }
+
   getMonthlyHours(year: number, month: number): Observable<number> {
     const start = new Date(year, month - 1, 1).toISOString().slice(0, 10);
     const end = new Date(year, month, 0).toISOString().slice(0, 10);
     return from(
-      this.supabase
-        .from('guaranteed_payments')
-        .select('hours_billed')
-        .eq('is_active', true)
-        .neq('status', 'rejected')
-        .gte('work_date', start)
-        .lte('work_date', end)
-        .then(({ data, error }) => {
-          if (error) throw error;
-          return (data ?? []).reduce((sum, row) => sum + Number(row.hours_billed), 0);
-        }),
+      this.supabase.auth.getUser().then(async ({ data: { user } }) => {
+        if (!user) return 0;
+        const { data, error } = await this.supabase
+          .from('guaranteed_payments')
+          .select('hours_billed')
+          .eq('is_active', true)
+          .eq('created_by', user.id)
+          .neq('status', 'rejected')
+          .gte('work_date', start)
+          .lte('work_date', end);
+        if (error) throw error;
+        return (data ?? []).reduce((sum, row) => sum + Number(row.hours_billed), 0);
+      }),
     );
   }
 }

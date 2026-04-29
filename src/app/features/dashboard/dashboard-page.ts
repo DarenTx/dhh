@@ -7,7 +7,10 @@ import {
   signal,
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { CurrencyPipe, DatePipe, SlicePipe } from '@angular/common';
+import { CurrencyPipe } from '@angular/common';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { of } from 'rxjs';
+import { catchError, map } from 'rxjs/operators';
 import { Title } from '@angular/platform-browser';
 import { NgIconComponent } from '@ng-icons/core';
 import { PropertyService } from '../../core/services/property.service';
@@ -15,6 +18,10 @@ import { ExpenseService, ExpenseWithCategory } from '../../core/services/expense
 import { ApprovalService, ApprovalRequirement } from '../../core/services/approval.service';
 import { RoleService } from '../../core/role/role.service';
 import { LeaseService } from '../../core/services/lease.service';
+import {
+  GuaranteedPaymentService,
+  GuaranteedPayment,
+} from '../../core/services/guaranteed-payment.service';
 
 interface DashboardStats {
   totalProperties: number;
@@ -27,7 +34,7 @@ interface DashboardStats {
 @Component({
   selector: 'app-dashboard-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, NgIconComponent, CurrencyPipe, DatePipe, SlicePipe],
+  imports: [RouterLink, NgIconComponent, CurrencyPipe],
   styles: `
     .page {
       padding: 1.25rem 1.5rem;
@@ -104,170 +111,194 @@ interface DashboardStats {
       margin: 0;
     }
 
-    .quick-links h2 {
-      margin: 0 0 1rem;
-      font-size: 1.125rem;
-      font-weight: 600;
-      color: #2d3748;
-    }
-
-    .link-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-      gap: 0.75rem;
-    }
-
-    .link-card {
-      background: #fff;
-      border: 1px solid #e2e8f0;
-      border-radius: 0.75rem;
-      padding: 1rem;
-      text-decoration: none;
-      display: flex;
-      align-items: center;
-      gap: 0.625rem;
-      font-size: 0.9375rem;
-      font-weight: 500;
-      color: #2d3748;
-      transition:
-        border-color 0.15s,
-        box-shadow 0.15s;
-
-      &:hover {
-        border-color: #bee3f8;
-        box-shadow: 0 1px 4px rgb(0 0 0 / 0.06);
-      }
-    }
-
     .loading {
       color: #718096;
     }
 
-    .recent-expenses h2 {
-      margin: 0 0 1rem;
-      font-size: 1.125rem;
-      font-weight: 600;
-      color: #2d3748;
-    }
+    .recent-expenses {
+      .section-toggle {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 0.75rem;
+        padding: 0.875rem 1.25rem;
+        margin-bottom: 0;
+        cursor: pointer;
+        color: inherit;
+        transition:
+          border-color 0.15s,
+          box-shadow 0.15s,
+          background 0.15s;
 
-    .expense-card {
-      background: #fff;
-      border: 1px solid #e2e8f0;
-      border-radius: 0.5rem;
-      padding: 1rem;
-      margin-bottom: 0.75rem;
-    }
+        &:hover {
+          border-color: #bee3f8;
+          background: #f7fafc;
+          box-shadow: 0 1px 4px rgb(0 0 0 / 0.06);
+        }
 
-    .expense-card:last-child {
-      margin-bottom: 0;
-    }
+        &.is-open {
+          border-bottom-left-radius: 0;
+          border-bottom-right-radius: 0;
+          border-bottom-color: transparent;
+        }
 
-    .expense-card h3 {
-      margin: 0 0 0.375rem;
-      font-size: 1rem;
-      font-weight: 600;
-      color: #2d3748;
-    }
+        h2 {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          margin: 0;
+          font-size: 1.125rem;
+          font-weight: 600;
+          color: #2d3748;
+        }
 
-    .expense-meta {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem 1.5rem;
-      font-size: 0.875rem;
-      color: #718096;
-    }
+        ng-icon {
+          color: #718096;
+          flex-shrink: 0;
+          transition: color 0.15s;
+        }
 
-    .expense-amount {
-      font-weight: 600;
-      color: #2d3748;
-    }
+        ng-icon.toggle-icon {
+          color: #4a5568;
+          transition:
+            color 0.15s,
+            transform 0.2s;
+        }
 
-    .expense-date {
-      font-size: 0.8125rem;
-      color: #a0aec0;
-    }
+        &:hover ng-icon {
+          color: #2b6cb0;
+        }
+      }
 
-    .section-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 1rem;
-
-      h2 {
-        margin: 0;
-        font-size: 1.125rem;
-        font-weight: 600;
-        color: #2d3748;
+      .expenses-body {
+        border: 1px solid #e2e8f0;
+        border-top: none;
+        border-bottom-left-radius: 0.75rem;
+        border-bottom-right-radius: 0.75rem;
+        padding: 1rem 1rem 0.5rem;
+        background: #fff;
+        margin-bottom: 0;
       }
     }
 
-    .approval-group {
-      background: #fff;
-      border: 1px solid #e2e8f0;
-      border-radius: 0.75rem;
-      padding: 1rem 1.25rem;
-      margin-bottom: 0.75rem;
-    }
-
-    .approval-group-header {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      margin-bottom: 0.5rem;
-    }
-
-    .approval-group-title {
-      margin: 0;
-      font-size: 0.8125rem;
-      font-weight: 600;
-      color: #4a5568;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-    }
-
-    .approval-badge {
-      min-width: 1.25rem;
-      height: 1.25rem;
-      padding: 0 0.3rem;
+    .approval-count {
+      min-width: 1.375rem;
+      height: 1.375rem;
+      padding: 0 0.375rem;
       background: #e53e3e;
       color: #fff;
       border-radius: 9999px;
-      font-size: 0.6875rem;
+      font-size: 0.75rem;
       font-weight: 700;
       display: inline-flex;
       align-items: center;
       justify-content: center;
     }
 
-    .all-clear {
-      margin: 0;
-      font-size: 0.875rem;
-      color: #a0aec0;
+    .expense-row {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 0.5rem;
+      padding: 1rem;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      cursor: pointer;
+      transition:
+        border-color 0.12s,
+        box-shadow 0.12s;
+      gap: 1rem;
+      margin-bottom: 0.5rem;
+      text-decoration: none;
+      &:last-child {
+        margin-bottom: 0;
+      }
+      &:hover {
+        border-color: #bee3f8;
+        box-shadow: 0 1px 4px rgb(0 0 0 / 0.06);
+      }
     }
-
-    .approval-item {
+    .expense-left {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+    .expense-date {
+      font-size: 0.8125rem;
+      color: #718096;
+    }
+    .expense-desc {
+      font-size: 1rem;
+      color: #2d3748;
+      font-weight: 600;
+    }
+    .expense-sub {
+      font-size: 0.875rem;
+      color: #718096;
+    }
+    .expense-right {
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      padding: 0.375rem 0;
-      border-bottom: 1px solid #f7fafc;
-      font-size: 0.875rem;
+      gap: 0.75rem;
+      flex-shrink: 0;
+    }
 
-      &:last-child {
-        border-bottom: none;
-        padding-bottom: 0;
+    .needs-approval-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.125rem 0.5rem;
+      background: #fff7ed;
+      color: #c05621;
+      border: 1px solid #fed7aa;
+      border-radius: 9999px;
+      font-size: 0.6875rem;
+      font-weight: 700;
+      white-space: nowrap;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+
+      &::before {
+        content: '';
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: currentColor;
+        margin-right: 0.3rem;
+        flex-shrink: 0;
       }
     }
 
-    .approval-item-id {
-      color: #4a5568;
-      font-family: monospace;
-      font-size: 0.8125rem;
+    .expense-row.needs-approval {
+      border-left: 3px solid #ed8936;
+      padding-left: calc(1rem - 2px);
     }
-
-    .approval-item-date {
-      font-size: 0.8125rem;
-      color: #a0aec0;
+    .expense-amount {
+      font-size: 0.9375rem;
+      font-weight: 600;
+      color: #2d3748;
+    }
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.125rem 0.5rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .status-pending {
+      background: #fef3c7;
+      color: #92400e;
+    }
+    .status-approved {
+      background: #d1fae5;
+      color: #065f46;
+    }
+    .status-rejected {
+      background: #fee2e2;
+      color: #991b1b;
     }
 
     .view-all-link {
@@ -279,7 +310,131 @@ interface DashboardStats {
       text-decoration: none;
       margin-top: 0.75rem;
     }
+
+    .recent-gps {
+      .section-toggle {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 0.75rem;
+        padding: 0.875rem 1.25rem;
+        margin-bottom: 0;
+        cursor: pointer;
+        color: inherit;
+        transition:
+          border-color 0.15s,
+          box-shadow 0.15s,
+          background 0.15s;
+
+        &:hover {
+          border-color: #bee3f8;
+          background: #f7fafc;
+          box-shadow: 0 1px 4px rgb(0 0 0 / 0.06);
+        }
+
+        &.is-open {
+          border-bottom-left-radius: 0;
+          border-bottom-right-radius: 0;
+          border-bottom-color: transparent;
+        }
+
+        h2 {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          margin: 0;
+          font-size: 1.125rem;
+          font-weight: 600;
+          color: #2d3748;
+        }
+
+        ng-icon {
+          color: #718096;
+          flex-shrink: 0;
+          transition: color 0.15s;
+        }
+
+        ng-icon.toggle-icon {
+          color: #4a5568;
+          transition:
+            color 0.15s,
+            transform 0.2s;
+        }
+
+        &:hover ng-icon {
+          color: #2b6cb0;
+        }
+      }
+
+      .gps-body {
+        border: 1px solid #e2e8f0;
+        border-top: none;
+        border-bottom-left-radius: 0.75rem;
+        border-bottom-right-radius: 0.75rem;
+        padding: 1rem 1rem 0.5rem;
+        background: #fff;
+        margin-bottom: 0;
+      }
+    }
+
+    .gp-row {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 0.5rem;
+      padding: 1rem;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      cursor: pointer;
+      transition:
+        border-color 0.12s,
+        box-shadow 0.12s;
+      gap: 1rem;
+      margin-bottom: 0.5rem;
+      text-decoration: none;
+      color: inherit;
+      &:last-child {
+        margin-bottom: 0;
+      }
+      &:hover {
+        border-color: #bee3f8;
+        box-shadow: 0 1px 4px rgb(0 0 0 / 0.06);
+      }
+      &.needs-approval {
+        border-left: 3px solid #ed8936;
+        padding-left: calc(1rem - 2px);
+      }
+    }
+    .gp-left {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+    .gp-date {
+      font-size: 0.8125rem;
+      color: #718096;
+    }
+    .gp-desc {
+      font-size: 1rem;
+      color: #2d3748;
+      font-weight: 600;
+    }
+    .gp-right {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      flex-shrink: 0;
+    }
+    .gp-hours {
+      font-size: 0.9375rem;
+      font-weight: 600;
+      color: #2d3748;
+    }
   `,
+
   template: `
     <div class="page">
       <h1>Dashboard</h1>
@@ -334,101 +489,121 @@ interface DashboardStats {
         </div>
       }
 
-      <div class="quick-links">
-        <h2>Quick links</h2>
-        <div class="link-grid">
-          <a class="link-card" routerLink="/properties">
-            <ng-icon name="heroBuildingOffice2" size="18" />
-            Properties
-          </a>
-          @if (canManage()) {
-            <a class="link-card" routerLink="/expenses">
-              <ng-icon name="heroCreditCard" size="18" />
-              Expenses
-            </a>
-            <a class="link-card" routerLink="/guaranteed-payments">
-              <ng-icon name="heroClock" size="18" />
-              Guaranteed Payments
-            </a>
-            <a class="link-card" routerLink="/approvals">
-              <ng-icon name="heroCheckCircle" size="18" />
-              Approvals
-            </a>
-          }
-        </div>
-      </div>
-
       @if (canManage()) {
-        <div class="approvals-section" style="margin-top: 2rem">
-          <div class="section-header">
-            <h2>Outstanding Approvals</h2>
-            <a class="view-all-link" routerLink="/approvals">
-              <ng-icon name="heroArrowRight" size="14" />
-              View all
-            </a>
-          </div>
-
-          @if (approvalsLoading()) {
-            <p class="loading">Loading…</p>
-          } @else {
-            <div class="approval-group">
-              <div class="approval-group-header">
-                <p class="approval-group-title">Expenses</p>
-                @if (pendingExpenseApprovals().length > 0) {
-                  <span class="approval-badge">{{ pendingExpenseApprovals().length }}</span>
-                }
-              </div>
-              @if (pendingExpenseApprovals().length === 0) {
-                <p class="all-clear">No pending expense approvals.</p>
-              } @else {
-                @for (req of pendingExpenseApprovals(); track req.id) {
-                  <div class="approval-item">
-                    <span class="approval-item-id">{{ req.approvable_id | slice: 0 : 8 }}…</span>
-                    <span class="approval-item-date">{{ req.created_at | slice: 0 : 10 }}</span>
-                  </div>
-                }
+        <div class="recent-gps" style="margin-top:2rem">
+          <button
+            class="section-toggle"
+            [class.is-open]="gpsExpanded()"
+            (click)="gpsExpanded.update(v => !v)"
+          >
+            <h2>
+              <ng-icon
+                [name]="gpsExpanded() ? 'heroChevronDown' : 'heroChevronRight'"
+                size="16"
+                class="toggle-icon"
+              />
+              Recent guaranteed payments
+              @if (pendingGPApprovalCount() > 0) {
+                <span class="approval-count">{{ pendingGPApprovalCount() }}</span>
               }
-            </div>
-
-            <div class="approval-group">
-              <div class="approval-group-header">
-                <p class="approval-group-title">Guaranteed Payments</p>
-                @if (pendingGpApprovals().length > 0) {
-                  <span class="approval-badge">{{ pendingGpApprovals().length }}</span>
-                }
-              </div>
-              @if (pendingGpApprovals().length === 0) {
-                <p class="all-clear">No pending guaranteed payment approvals.</p>
+            </h2>
+            <ng-icon [name]="gpsExpanded() ? 'heroChevronUp' : 'heroChevronDown'" size="18" />
+          </button>
+          @if (gpsExpanded()) {
+            <div class="gps-body">
+              @if (recentGPs().length === 0 && !loading()) {
+                <p style="color:#a0aec0;font-size:0.9375rem">
+                  No guaranteed payments recorded yet.
+                </p>
               } @else {
-                @for (req of pendingGpApprovals(); track req.id) {
-                  <div class="approval-item">
-                    <span class="approval-item-id">{{ req.approvable_id | slice: 0 : 8 }}…</span>
-                    <span class="approval-item-date">{{ req.created_at | slice: 0 : 10 }}</span>
-                  </div>
+                @for (gp of recentGPs(); track gp.id) {
+                  <a
+                    class="gp-row"
+                    [class.needs-approval]="pendingGPApprovalIds().has(gp.id)"
+                    [routerLink]="['/guaranteed-payments', gp.id]"
+                  >
+                    <div class="gp-left">
+                      <span class="gp-date">{{ gp.work_date }}</span>
+                      <span class="gp-desc">{{ gp.work_description }}</span>
+                    </div>
+                    <div class="gp-right">
+                      @if (pendingGPApprovalIds().has(gp.id)) {
+                        <span class="needs-approval-badge">Review</span>
+                      }
+                      <span class="status-badge status-{{ gp.status }}">{{ gp.status }}</span>
+                      <span class="gp-hours">{{ gp.hours_billed }} hrs</span>
+                    </div>
+                  </a>
                 }
+                <a class="view-all-link" routerLink="/guaranteed-payments">
+                  <ng-icon name="heroArrowRight" size="14" />
+                  View all guaranteed payments
+                </a>
               }
             </div>
           }
         </div>
 
-        <div class="recent-expenses" style="margin-top:2rem">
-          <h2>Recent expenses</h2>
-          @if (recentExpenses().length === 0 && !loading()) {
-            <p style="color:#a0aec0;font-size:0.9375rem">No expenses recorded yet.</p>
-          } @else {
-            @for (exp of recentExpenses(); track exp.id) {
-              <div class="expense-card">
-                <h3>{{ exp.description }}</h3>
-                <div class="expense-meta">
-                  <span>{{ exp.amount | currency }}</span>
-                  <span>{{ exp.date | date: 'mediumDate' }}</span>
-                </div>
-              </div>
-            }
-            <a class="view-all-link" routerLink="/expenses">
-              <ng-icon name="heroArrowRight" size="14" />
-              View all expenses
-            </a>
+        <div class="recent-expenses" style="margin-top:1rem">
+          <button
+            class="section-toggle"
+            [class.is-open]="expensesExpanded()"
+            (click)="expensesExpanded.update(v => !v)"
+          >
+            <h2>
+              <ng-icon
+                [name]="expensesExpanded() ? 'heroChevronDown' : 'heroChevronRight'"
+                size="16"
+                class="toggle-icon"
+              />
+              Recent expenses
+              @if (pendingExpenseApprovalCount() > 0) {
+                <span class="approval-count">{{ pendingExpenseApprovalCount() }}</span>
+              }
+            </h2>
+            <ng-icon [name]="expensesExpanded() ? 'heroChevronUp' : 'heroChevronDown'" size="18" />
+          </button>
+          @if (expensesExpanded()) {
+            <div class="expenses-body">
+              @if (recentExpenses().length === 0 && !loading()) {
+                <p style="color:#a0aec0;font-size:0.9375rem">No expenses recorded yet.</p>
+              } @else {
+                @for (exp of recentExpenses(); track exp.id) {
+                  <a
+                    class="expense-row"
+                    [class.needs-approval]="pendingExpenseApprovalIds().has(exp.id)"
+                    [routerLink]="['/expenses', exp.id]"
+                  >
+                    <div class="expense-left">
+                      <span class="expense-date">{{ exp.date }}</span>
+                      <span class="expense-desc">{{ exp.description }}</span>
+                      <span class="expense-sub">
+                        {{ exp.irs_expense_categories?.name ?? '' }}
+                        @if (exp.expense_subcategories?.name) {
+                          · {{ exp.expense_subcategories!.name }}
+                        }
+                        @if (exp.properties?.address_line1) {
+                          · {{ exp.properties!.address_line1 }}
+                        } @else {
+                          · LLC-wide
+                        }
+                      </span>
+                    </div>
+                    <div class="expense-right">
+                      @if (pendingExpenseApprovalIds().has(exp.id)) {
+                        <span class="needs-approval-badge">Review</span>
+                      }
+                      <span class="status-badge status-{{ exp.status }}">{{ exp.status }}</span>
+                      <span class="expense-amount">\${{ exp.amount.toFixed(2) }}</span>
+                    </div>
+                  </a>
+                }
+                <a class="view-all-link" routerLink="/expenses">
+                  <ng-icon name="heroArrowRight" size="14" />
+                  View all expenses
+                </a>
+              }
+            </div>
           }
         </div>
       }
@@ -438,23 +613,45 @@ interface DashboardStats {
 export class DashboardPage implements OnInit {
   private readonly propertyService = inject(PropertyService);
   private readonly leaseService = inject(LeaseService);
-  private readonly expenseService = inject(ExpenseService);
   private readonly approvalService = inject(ApprovalService);
+  private readonly expenseService = inject(ExpenseService);
+  private readonly gpService = inject(GuaranteedPaymentService);
   private readonly roles = inject(RoleService);
   private readonly title = inject(Title);
 
   readonly loading = signal(true);
   readonly stats = signal<DashboardStats | null>(null);
   readonly recentExpenses = signal<ExpenseWithCategory[]>([]);
-  readonly pendingApprovals = signal<ApprovalRequirement[]>([]);
-  readonly approvalsLoading = signal(true);
+  readonly recentGPs = signal<GuaranteedPayment[]>([]);
+  readonly expensesExpanded = signal(false);
+  readonly gpsExpanded = signal(false);
 
-  readonly pendingExpenseApprovals = computed(() =>
-    this.pendingApprovals().filter((r) => r.approvable_type === 'expense'),
+  readonly pendingExpenseApprovals = toSignal(
+    this.approvalService.getPendingForMe().pipe(
+      map((items) => items.filter((r) => r.approvable_type === 'expense')),
+      catchError(() => of([] as ApprovalRequirement[])),
+    ),
+    { initialValue: [] as ApprovalRequirement[] },
   );
 
-  readonly pendingGpApprovals = computed(() =>
-    this.pendingApprovals().filter((r) => r.approvable_type === 'guaranteed_payment'),
+  readonly pendingExpenseApprovalCount = computed(() => this.pendingExpenseApprovals().length);
+
+  readonly pendingExpenseApprovalIds = computed(
+    () => new Set(this.pendingExpenseApprovals().map((r) => r.approvable_id)),
+  );
+
+  readonly pendingGPApprovals = toSignal(
+    this.approvalService.getPendingForMe().pipe(
+      map((items) => items.filter((r) => r.approvable_type === 'guaranteed_payment')),
+      catchError(() => of([] as ApprovalRequirement[])),
+    ),
+    { initialValue: [] as ApprovalRequirement[] },
+  );
+
+  readonly pendingGPApprovalCount = computed(() => this.pendingGPApprovals().length);
+
+  readonly pendingGPApprovalIds = computed(
+    () => new Set(this.pendingGPApprovals().map((r) => r.approvable_id)),
   );
 
   canManage(): boolean {
@@ -503,15 +700,10 @@ export class DashboardPage implements OnInit {
         next: (expenses) => this.recentExpenses.set(expenses),
         error: () => {},
       });
-      this.approvalService.getPendingForMe().subscribe({
-        next: (items) => {
-          this.pendingApprovals.set(items);
-          this.approvalsLoading.set(false);
-        },
-        error: () => this.approvalsLoading.set(false),
+      this.gpService.getRecentPayments(5).subscribe({
+        next: (gps) => this.recentGPs.set(gps),
+        error: () => {},
       });
-    } else {
-      this.approvalsLoading.set(false);
     }
   }
 }

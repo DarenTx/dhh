@@ -1,16 +1,161 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
-import { DatePipe, JsonPipe } from '@angular/common';
+import { DatePipe, JsonPipe, SlicePipe } from '@angular/common';
 import { NgIconComponent } from '@ng-icons/core';
 import { AuditRow, AuditService, AuditLoadParams } from '../../core/services/audit.service';
 
 const PAGE_SIZE = 150;
 
+function fmt(data: Record<string, unknown> | null): Record<string, unknown> {
+  return data ?? {};
+}
+
+function money(val: unknown): string {
+  const n = Number(val);
+  return isNaN(n)
+    ? String(val ?? '')
+    : `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function describeAuditRow(row: AuditRow): string {
+  const actor = row.performer_display ?? '(system)';
+  const d = fmt(row.new_data ?? row.old_data);
+  const prev = fmt(row.old_data);
+  const op = row.operation;
+
+  switch (row.table_name) {
+    case 'expenses': {
+      const amount = money(d['amount']);
+      if (op === 'INSERT') return `${actor} submitted an expense for ${amount}`;
+      if (op === 'DELETE') return `${actor} deleted an expense for ${amount}`;
+      if (op === 'UPDATE') {
+        if (d['status'] === 'approved' && prev['status'] !== 'approved')
+          return `${actor} approved an expense for ${amount}`;
+        if (d['status'] === 'rejected' && prev['status'] !== 'rejected')
+          return `${actor} rejected an expense for ${amount}`;
+        return `${actor} updated an expense for ${amount}`;
+      }
+      break;
+    }
+
+    case 'guaranteed_payments': {
+      const hours = d['hours_billed'];
+      const desc = d['work_description'] ?? '';
+      if (op === 'INSERT') return `${actor} logged ${hours} hrs — ${desc}`;
+      if (op === 'DELETE') return `${actor} deleted a guaranteed payment (${hours} hrs)`;
+      if (op === 'UPDATE') {
+        if (d['status'] === 'approved' && prev['status'] !== 'approved')
+          return `${actor} approved a guaranteed payment (${hours} hrs)`;
+        if (d['status'] === 'rejected' && prev['status'] !== 'rejected')
+          return `${actor} rejected a guaranteed payment (${hours} hrs)`;
+        return `${actor} updated a guaranteed payment (${hours} hrs)`;
+      }
+      break;
+    }
+
+    case 'properties': {
+      const addr = d['address_line1'] ?? 'a property';
+      if (op === 'INSERT') return `${actor} added property: ${addr}`;
+      if (op === 'DELETE') return `${actor} deleted property: ${addr}`;
+      if (op === 'UPDATE') {
+        if (d['is_active'] === false && prev['is_active'] !== false)
+          return `${actor} deactivated property: ${addr}`;
+        if (d['is_active'] === true && prev['is_active'] !== true)
+          return `${actor} reactivated property: ${addr}`;
+        return `${actor} updated property: ${addr}`;
+      }
+      break;
+    }
+
+    case 'tenants': {
+      const name = [d['first_name'], d['last_name']].filter(Boolean).join(' ') || 'a tenant';
+      if (op === 'INSERT') return `${actor} added tenant: ${name}`;
+      if (op === 'DELETE') return `${actor} deleted tenant: ${name}`;
+      if (op === 'UPDATE') {
+        if (d['is_active'] === false && prev['is_active'] !== false)
+          return `${actor} deactivated tenant: ${name}`;
+        if (d['is_active'] === true && prev['is_active'] !== true)
+          return `${actor} reactivated tenant: ${name}`;
+        return `${actor} updated tenant: ${name}`;
+      }
+      break;
+    }
+
+    case 'leases': {
+      const rent = money(d['monthly_rent']);
+      if (op === 'INSERT') return `${actor} created a lease at ${rent}/mo`;
+      if (op === 'DELETE') return `${actor} deleted a lease`;
+      if (op === 'UPDATE') {
+        if (d['status'] === 'terminated' && prev['status'] !== 'terminated')
+          return `${actor} terminated a lease`;
+        if (d['status'] === 'expired' && prev['status'] !== 'expired')
+          return `${actor} marked a lease as expired`;
+        return `${actor} updated a lease at ${rent}/mo`;
+      }
+      break;
+    }
+
+    case 'notes': {
+      if (op === 'INSERT') return `${actor} added a note`;
+      if (op === 'DELETE') return `${actor} deleted a note`;
+      return `${actor} updated a note`;
+    }
+
+    case 'user_roles': {
+      const email = d['email'] ?? 'a user';
+      const role = d['role'] ?? '';
+      if (op === 'INSERT') return `${actor} invited ${email} as ${role}`;
+      if (op === 'DELETE') return `${actor} removed user ${email}`;
+      if (op === 'UPDATE') {
+        if (d['is_active'] === false && prev['is_active'] !== false)
+          return `${actor} deactivated user ${email}`;
+        if (d['is_active'] === true && prev['is_active'] !== true)
+          return `${actor} reactivated user ${email}`;
+        if (d['role'] !== prev['role']) return `${actor} changed ${email}'s role to ${role}`;
+        return `${actor} updated user ${email}`;
+      }
+      break;
+    }
+
+    case 'app_settings': {
+      if (op === 'UPDATE') return `${actor} updated application settings`;
+      break;
+    }
+
+    case 'expense_subcategories': {
+      const name = d['name'] ?? 'a subcategory';
+      if (op === 'INSERT') return `${actor} added expense subcategory: ${name}`;
+      if (op === 'DELETE') return `${actor} deleted expense subcategory: ${name}`;
+      if (op === 'UPDATE') {
+        if (d['is_active'] === false && prev['is_active'] !== false)
+          return `${actor} disabled expense subcategory: ${name}`;
+        return `${actor} updated expense subcategory: ${name}`;
+      }
+      break;
+    }
+
+    case 'approval_requirements': {
+      if (op === 'INSERT') return `${actor} added an approval requirement`;
+      if (op === 'DELETE') return `${actor} removed an approval requirement`;
+      return `${actor} updated an approval requirement`;
+    }
+  }
+
+  // Generic fallback
+  const label = row.table_name.replace(/_/g, ' ');
+  const pastTense: Record<string, string> = {
+    INSERT: 'inserted',
+    UPDATE: 'updated',
+    DELETE: 'deleted',
+  };
+  return `${actor} ${pastTense[op] ?? op.toLowerCase()} a ${label} record`;
+}
+
 @Component({
   selector: 'app-audit-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, DatePipe, JsonPipe, NgIconComponent],
+  imports: [FormsModule, DatePipe, JsonPipe, SlicePipe, NgIconComponent],
   styles: `
     :host {
       display: block;
@@ -131,6 +276,27 @@ const PAGE_SIZE = 150;
       background: #f7fafc;
     }
 
+    .diff-row td {
+      background: #f7fafc;
+      padding: 0.75rem;
+    }
+
+    .diff-meta {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.625rem;
+    }
+
+    .diff-table {
+      font-family: monospace;
+      font-size: 0.8125rem;
+      color: #4a5568;
+      background: #edf2f7;
+      padding: 0.125rem 0.5rem;
+      border-radius: 0.25rem;
+    }
+
     .op-badge {
       display: inline-block;
       padding: 0.125rem 0.5rem;
@@ -150,11 +316,6 @@ const PAGE_SIZE = 150;
     .op-DELETE {
       background: #fff5f5;
       color: #c53030;
-    }
-
-    .diff-row td {
-      background: #f7fafc;
-      padding: 0.75rem;
     }
 
     pre {
@@ -189,25 +350,6 @@ const PAGE_SIZE = 150;
         <label for="to">To</label>
         <input id="to" type="date" [(ngModel)]="filters.to" />
       </div>
-      <div class="filter-group">
-        <label for="table">Table</label>
-        <select id="table" [(ngModel)]="filters.table">
-          <option value="">All tables</option>
-          <option value="user_roles">user_roles</option>
-          <option value="app_settings">app_settings</option>
-          <option value="expense_subcategories">expense_subcategories</option>
-          <option value="approval_requirements">approval_requirements</option>
-        </select>
-      </div>
-      <div class="filter-group">
-        <label for="operation">Operation</label>
-        <select id="operation" [(ngModel)]="filters.operation">
-          <option value="">All operations</option>
-          <option value="INSERT">INSERT</option>
-          <option value="UPDATE">UPDATE</option>
-          <option value="DELETE">DELETE</option>
-        </select>
-      </div>
       <button class="btn btn-primary" (click)="applyFilters()">
         <ng-icon name="heroFunnel" size="16" />
         Apply
@@ -222,29 +364,27 @@ const PAGE_SIZE = 150;
         <table>
           <thead>
             <tr>
-              <th>Timestamp</th>
-              <th>User</th>
-              <th>Table</th>
-              <th>Operation</th>
-              <th>Record ID</th>
+              <th style="width: 10rem">Timestamp</th>
+              <th>Description</th>
+              <th style="width: 8rem">Record ID</th>
             </tr>
           </thead>
           <tbody>
             @for (row of rows(); track row.id) {
               <tr class="expandable" (click)="toggleRow(row.id)">
-                <td>{{ row.performed_at | date: 'short' }}</td>
-                <td>{{ row.performer_email ?? '(system)' }}</td>
-                <td>{{ row.table_name }}</td>
-                <td>
-                  <span class="op-badge" [class]="'op-' + row.operation">
-                    {{ row.operation }}
-                  </span>
+                <td>{{ row.performed_at | date: 'M/d/yy h:mm a' }}</td>
+                <td>{{ describe(row) }}</td>
+                <td style="font-size: 0.75rem; color: #a0aec0; font-family: monospace">
+                  {{ row.record_id | slice: 0 : 8 }}…
                 </td>
-                <td>{{ row.record_id }}</td>
               </tr>
               @if (expandedRowId() === row.id) {
                 <tr class="diff-row">
-                  <td colspan="5">
+                  <td colspan="3">
+                    <div class="diff-meta">
+                      <span class="diff-table">{{ row.table_name }}</span>
+                      <span class="op-badge op-{{ row.operation }}">{{ row.operation }}</span>
+                    </div>
                     <strong>Before:</strong>
                     <pre>{{ row.old_data | json }}</pre>
                     <strong>After:</strong>
@@ -284,6 +424,8 @@ export class AuditPage {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
 
+  readonly describe = describeAuditRow;
+
   readonly PAGE_SIZE = PAGE_SIZE;
   readonly rows = signal<AuditRow[]>([]);
   readonly totalCount = signal(0);
@@ -291,7 +433,17 @@ export class AuditPage {
   readonly loading = signal(false);
   readonly expandedRowId = signal<string | null>(null);
 
-  filters: { from?: string; to?: string; table?: string; operation?: string } = {};
+  filters: { from: string; to: string } = AuditPage.defaultDateRange();
+
+  private static defaultDateRange(): { from: string; to: string } {
+    const today = new Date();
+    const from = new Date(today);
+    from.setDate(from.getDate() - 60);
+    return {
+      from: from.toISOString().split('T')[0],
+      to: today.toISOString().split('T')[0],
+    };
+  }
 
   totalPages(): number {
     return Math.max(1, Math.ceil(this.totalCount() / PAGE_SIZE));
@@ -311,10 +463,6 @@ export class AuditPage {
       page: this.currentPage(),
       ...(this.filters.from ? { from: this.filters.from } : {}),
       ...(this.filters.to ? { to: this.filters.to } : {}),
-      ...(this.filters.table ? { table: this.filters.table } : {}),
-      ...(this.filters.operation
-        ? { operation: this.filters.operation as AuditLoadParams['operation'] }
-        : {}),
     };
 
     this.auditService.loadAudit(params).subscribe({
@@ -332,7 +480,7 @@ export class AuditPage {
   }
 
   clearFilters(): void {
-    this.filters = {};
+    this.filters = AuditPage.defaultDateRange();
     this.router.navigate([], { queryParams: { page: 1 }, replaceUrl: true });
   }
 

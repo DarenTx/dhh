@@ -3,6 +3,8 @@ import { createClient } from 'jsr:@supabase/supabase-js@2';
 interface InvitePayload {
   email: string;
   role: 'admin' | 'manager' | 'view_only';
+  first_name?: string;
+  last_name?: string;
 }
 
 const CORS_HEADERS = {
@@ -40,8 +42,18 @@ Deno.serve(async (req: Request) => {
     }
 
     // ── 2. Verify the caller is an admin ─────────────────────────────────────
-    const callerRole = callerUser.app_metadata?.role as string | undefined;
-    if (callerRole !== 'admin') {
+    // Query user_roles directly — getUser() returns raw_app_meta_data from auth.users
+    // which does NOT include claims injected by the custom_access_token_hook.
+    const adminClientForAuth = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+    const { data: callerUserRole } = await adminClientForAuth
+      .from('user_roles')
+      .select('role, is_active')
+      .eq('user_id', callerUser.id)
+      .maybeSingle();
+
+    if (!callerUserRole?.is_active || callerUserRole?.role !== 'admin') {
       return errorResponse(403, 'Only admins can invite users');
     }
 
@@ -53,7 +65,7 @@ Deno.serve(async (req: Request) => {
       return errorResponse(400, 'Invalid JSON body');
     }
 
-    const { email, role } = payload;
+    const { email, role, first_name, last_name } = payload;
     if (!email || typeof email !== 'string') {
       return errorResponse(400, 'email is required');
     }
@@ -67,39 +79,67 @@ Deno.serve(async (req: Request) => {
       return errorResponse(400, 'Invalid email format');
     }
 
-    // ── 4. Send the invite using the service role client ─────────────────────
-    const adminClient = createClient(supabaseUrl, serviceRoleKey, {
-      auth: { autoRefreshToken: false, persistSession: false },
-    });
+    // ── 4. Resolve or invite the user ────────────────────────────────────────
+    // If the user already has an auth account (e.g. signed up via Google/OAuth),
+    // inviteUserByEmail will fail. In that case, look up the existing user and
+    // just assign them the role — no re-invite needed.
+    let targetUserId: string;
+    let wasInvited = true;
 
-    const { data: inviteData, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(
-      email,
-      { data: {} }, // no user_metadata pre-populated
-    );
+    const { data: inviteData, error: inviteError } =
+      await adminClientForAuth.auth.admin.inviteUserByEmail(email, { data: {} });
 
     if (inviteError) {
-      console.error('inviteUserByEmail error:', inviteError);
-      return errorResponse(500, inviteError.message ?? 'Failed to send invite');
+      // "User already registered" — look up the existing user by email
+      if (inviteError.message?.toLowerCase().includes('already')) {
+        const { data: listData, error: listError } = await adminClientForAuth.auth.admin.listUsers({
+          page: 1,
+          perPage: 1000,
+        });
+        if (listError) {
+          console.error('listUsers error:', listError);
+          return errorResponse(500, listError.message ?? 'Failed to look up existing user');
+        }
+        const existing = listData?.users?.find(
+          (u) => u.email?.toLowerCase() === email.toLowerCase(),
+        );
+        if (!existing) {
+          return errorResponse(500, 'User already exists but could not be located');
+        }
+        targetUserId = existing.id;
+        wasInvited = false;
+      } else {
+        console.error('inviteUserByEmail error:', inviteError);
+        return errorResponse(500, inviteError.message ?? 'Failed to send invite');
+      }
+    } else {
+      targetUserId = inviteData.user.id;
     }
 
-    const invitedUserId = inviteData.user.id;
+    // ── 5. Upsert into user_roles ─────────────────────────────────────────────
+    const { error: upsertError } = await adminClientForAuth.from('user_roles').upsert(
+      {
+        user_id: targetUserId,
+        email: email.toLowerCase().trim(),
+        role,
+        first_name: first_name?.trim() ?? null,
+        last_name: last_name?.trim() ?? null,
+        invited_by: callerUser.id,
+      },
+      { onConflict: 'user_id' },
+    );
 
-    // ── 5. Insert into user_roles ─────────────────────────────────────────────
-    const { error: insertError } = await adminClient.from('user_roles').insert({
-      user_id: invitedUserId,
-      email: email.toLowerCase().trim(),
-      role,
-      invited_by: callerUser.id,
-    });
-
-    if (insertError) {
-      // Attempt to clean up the orphaned auth user if role insert fails
-      await adminClient.auth.admin.deleteUser(invitedUserId).catch(() => undefined);
-      console.error('user_roles insert error:', insertError);
-      return errorResponse(500, 'Invite sent but failed to record role. Please contact support.');
+    if (upsertError) {
+      // If we just invited a fresh user, clean up the orphaned auth record
+      if (wasInvited) {
+        await adminClientForAuth.auth.admin.deleteUser(targetUserId).catch(() => undefined);
+      }
+      console.error('user_roles upsert error:', upsertError);
+      return errorResponse(500, 'Failed to record role. Please contact support.');
     }
 
-    return new Response(JSON.stringify({ message: `Invite sent to ${email}` }), {
+    const message = wasInvited ? `Invite sent to ${email}` : `Role assigned to ${email}`;
+    return new Response(JSON.stringify({ message }), {
       status: 200,
       headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
     });

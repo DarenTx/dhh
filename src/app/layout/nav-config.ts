@@ -9,7 +9,13 @@ export interface NavItem {
 
 export const NAV_ITEMS: NavItem[] = [
   { label: 'Dashboard', path: '/dashboard', icon: 'heroHome', minRole: 'all', bottomNav: true },
-  { label: 'Properties', path: '/properties', icon: 'heroBuildingOffice2', minRole: 'all', bottomNav: true },
+  {
+    label: 'Properties',
+    path: '/properties',
+    icon: 'heroBuildingOffice2',
+    minRole: 'all',
+    bottomNav: true,
+  },
   {
     label: 'Expenses',
     path: '/expenses',
@@ -21,13 +27,6 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'Guaranteed Payments',
     path: '/guaranteed-payments',
     icon: 'heroClock',
-    minRole: 'manager',
-    bottomNav: true,
-  },
-  {
-    label: 'Approvals',
-    path: '/approvals',
-    icon: 'heroCheckCircle',
     minRole: 'manager',
     bottomNav: true,
   },

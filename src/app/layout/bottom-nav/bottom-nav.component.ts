@@ -1,12 +1,8 @@
 import { ChangeDetectionStrategy, Component, HostListener, inject, signal } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 import { NgIconComponent } from '@ng-icons/core';
-import { toSignal } from '@angular/core/rxjs-interop';
-import { of } from 'rxjs';
-import { catchError } from 'rxjs/operators';
 import { RoleService } from '../../core/role/role.service';
 import { NAV_ITEMS, NavItem } from '../nav-config';
-import { ApprovalService } from '../../core/services/approval.service';
 import { AuthenticationService } from '../../core/auth/authentication.service';
 
 @Component({
@@ -167,9 +163,6 @@ import { AuthenticationService } from '../../core/auth/authentication.service';
       >
         <span class="icon-wrap">
           <ng-icon [name]="item.icon" size="20" />
-          @if (item.path === '/approvals' && pendingCount() > 0) {
-            <span class="badge">{{ pendingCount() }}</span>
-          }
         </span>
         <span class="label">{{ item.label }}</span>
       </a>
@@ -199,9 +192,6 @@ import { AuthenticationService } from '../../core/auth/authentication.service';
             >
               <span class="icon-wrap" style="position:relative;display:inline-flex">
                 <ng-icon [name]="item.icon" size="20" />
-                @if (item.path === '/approvals' && pendingCount() > 0) {
-                  <span class="badge">{{ pendingCount() }}</span>
-                }
               </span>
               {{ item.label }}
             </a>
@@ -218,15 +208,9 @@ import { AuthenticationService } from '../../core/auth/authentication.service';
 })
 export class BottomNavComponent {
   private readonly roles = inject(RoleService);
-  private readonly approvalService = inject(ApprovalService);
   private readonly auth = inject(AuthenticationService);
 
   readonly menuOpen = signal(false);
-
-  readonly pendingCount = toSignal(
-    this.approvalService.getPendingCountForMe().pipe(catchError(() => of(0))),
-    { initialValue: 0 },
-  );
 
   pinnedItems(): NavItem[] {
     return NAV_ITEMS.filter((item) => item.bottomNav && this.isVisible(item));

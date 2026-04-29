@@ -12,14 +12,12 @@ export interface AuditRow {
   new_data: Record<string, unknown> | null;
   performed_by: string | null;
   performed_at: string;
-  performer_email: string | null;
+  performer_display: string | null;
 }
 
 export interface AuditLoadParams {
   from?: string;
   to?: string;
-  table?: string;
-  operation?: 'INSERT' | 'UPDATE' | 'DELETE';
   page: number;
 }
 
@@ -35,23 +33,23 @@ export class AuditService {
   private readonly supabase = inject<SupabaseClient>(SUPABASE_CLIENT);
 
   loadAudit(params: AuditLoadParams): Observable<AuditResult> {
-    const { from: fromDate, to, table, operation, page } = params;
+    const { from: fromDate, to, page } = params;
     const start = (page - 1) * PAGE_SIZE;
     const end = start + PAGE_SIZE - 1;
 
     let query = this.supabase
       .from('audit_log')
       .select(
-        'id, table_name, record_id, operation, old_data, new_data, performed_by, performed_at, user_roles!audit_log_performed_by_fkey(email)',
+        'id, table_name, record_id, operation, old_data, new_data, performed_by, performed_by_text, performed_at',
         { count: 'exact' },
       )
       .order('performed_at', { ascending: false })
+      .neq('table_name', 'ai_extraction_drafts')
+      .neq('table_name', 'approval_requirements')
       .range(start, end);
 
     if (fromDate) query = query.gte('performed_at', fromDate);
-    if (to) query = query.lte('performed_at', to);
-    if (table) query = query.eq('table_name', table);
-    if (operation) query = query.eq('operation', operation);
+    if (to) query = query.lte('performed_at', to + 'T23:59:59Z');
 
     return from(
       query.then(({ data, error, count }) => {
@@ -65,7 +63,7 @@ export class AuditService {
           new_data: row.new_data,
           performed_by: row.performed_by,
           performed_at: row.performed_at,
-          performer_email: row.user_roles?.email ?? null,
+          performer_display: row.performed_by_text ?? null,
         }));
         return { rows, totalCount: count ?? 0 };
       }),

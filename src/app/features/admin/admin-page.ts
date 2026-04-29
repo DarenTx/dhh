@@ -166,6 +166,38 @@ import { map } from 'rxjs';
       padding: 0.25rem 0.625rem;
     }
 
+    .avatar {
+      width: 2rem;
+      height: 2rem;
+      border-radius: 9999px;
+      object-fit: cover;
+    }
+    .avatar-placeholder {
+      width: 2rem;
+      height: 2rem;
+      border-radius: 9999px;
+      background: #e2e8f0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #718096;
+    }
+    .user-cell {
+      display: flex;
+      align-items: center;
+      gap: 0.625rem;
+    }
+    .user-name {
+      font-weight: 500;
+      color: #2d3748;
+    }
+    .user-email {
+      font-size: 0.8125rem;
+      color: #718096;
+    }
+
     .success-msg {
       color: #276749;
       font-size: 0.9375rem;
@@ -191,7 +223,7 @@ import { map } from 'rxjs';
         <table>
           <thead>
             <tr>
-              <th>Email</th>
+              <th>Name</th>
               <th>Role</th>
               <th>Status</th>
               <th>Actions</th>
@@ -200,7 +232,23 @@ import { map } from 'rxjs';
           <tbody>
             @for (user of users(); track user.user_id) {
               <tr>
-                <td>{{ user.email }}</td>
+                <td>
+                  <div class="user-cell">
+                    @if (user.avatar_url) {
+                      <img class="avatar" [src]="user.avatar_url" [alt]="user.email" />
+                    } @else {
+                      <span class="avatar-placeholder">{{
+                        (user.first_name?.[0] ?? user.email[0]).toUpperCase()
+                      }}</span>
+                    }
+                    <div>
+                      @if (user.first_name || user.last_name) {
+                        <div class="user-name">{{ user.first_name }} {{ user.last_name }}</div>
+                      }
+                      <div class="user-email">{{ user.email }}</div>
+                    </div>
+                  </div>
+                </td>
                 <td>
                   <span
                     class="badge"
@@ -240,6 +288,14 @@ import { map } from 'rxjs';
       <h2>Invite User</h2>
       <div class="invite-card">
         <form [formGroup]="inviteForm" (ngSubmit)="invite()">
+          <div class="form-group">
+            <label for="first-name">First Name</label>
+            <input id="first-name" type="text" formControlName="firstName" placeholder="Jane" />
+          </div>
+          <div class="form-group">
+            <label for="last-name">Last Name</label>
+            <input id="last-name" type="text" formControlName="lastName" placeholder="Smith" />
+          </div>
           <div class="form-group">
             <label for="email">Email</label>
             <input
@@ -295,6 +351,8 @@ export class AdminPage {
   readonly currentUserId = signal<string | null>(null);
 
   readonly inviteForm = this.fb.group({
+    firstName: [''],
+    lastName: [''],
     email: ['', [Validators.required, Validators.email]],
     role: ['view_only' as UserRole, Validators.required],
   });
@@ -323,19 +381,21 @@ export class AdminPage {
     this.inviteSuccess.set(false);
     this.inviteError.set(null);
 
-    const { email, role } = this.inviteForm.value;
-    this.adminService.inviteUser(email!, role as UserRole).subscribe({
-      next: () => {
-        this.submitting.set(false);
-        this.inviteSuccess.set(true);
-        this.inviteForm.reset({ email: '', role: 'view_only' });
-        this.loadUsers();
-      },
-      error: (err) => {
-        this.submitting.set(false);
-        this.inviteError.set(err?.message ?? 'Failed to send invite.');
-      },
-    });
+    const { email, role, firstName, lastName } = this.inviteForm.value;
+    this.adminService
+      .inviteUser(email!, role as UserRole, firstName ?? undefined, lastName ?? undefined)
+      .subscribe({
+        next: () => {
+          this.submitting.set(false);
+          this.inviteSuccess.set(true);
+          this.inviteForm.reset({ firstName: '', lastName: '', email: '', role: 'view_only' });
+          this.loadUsers();
+        },
+        error: (err) => {
+          this.submitting.set(false);
+          this.inviteError.set(err?.message ?? 'Failed to send invite.');
+        },
+      });
   }
 
   deactivate(user: UserRecord): void {

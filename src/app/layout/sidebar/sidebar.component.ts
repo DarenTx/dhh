@@ -1,12 +1,8 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 import { NgIconComponent } from '@ng-icons/core';
-import { toSignal } from '@angular/core/rxjs-interop';
-import { of } from 'rxjs';
-import { catchError } from 'rxjs/operators';
 import { RoleService } from '../../core/role/role.service';
 import { NAV_ITEMS, NavItem } from '../nav-config';
-import { ApprovalService } from '../../core/services/approval.service';
 import { AuthenticationService } from '../../core/auth/authentication.service';
 
 @Component({
@@ -130,9 +126,6 @@ import { AuthenticationService } from '../../core/auth/authentication.service';
         >
           <ng-icon [name]="item.icon" size="20" />
           <span>{{ item.label }}</span>
-          @if (item.path === '/approvals' && pendingCount() > 0) {
-            <span class="badge">{{ pendingCount() }}</span>
-          }
         </a>
       }
     </nav>
@@ -146,13 +139,7 @@ import { AuthenticationService } from '../../core/auth/authentication.service';
 })
 export class SidebarComponent {
   private readonly roles = inject(RoleService);
-  private readonly approvalService = inject(ApprovalService);
   private readonly auth = inject(AuthenticationService);
-
-  readonly pendingCount = toSignal(
-    this.approvalService.getPendingCountForMe().pipe(catchError(() => of(0))),
-    { initialValue: 0 },
-  );
 
   visibleItems() {
     return NAV_ITEMS.filter((item: NavItem) => this.isVisible(item));
