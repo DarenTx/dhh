@@ -30,6 +30,12 @@ export const NAV_ITEMS: NavItem[] = [
     minRole: 'manager',
     bottomNav: true,
   },
+  {
+    label: 'Documents',
+    path: '/documents',
+    icon: 'heroDocumentText',
+    minRole: 'all',
+  },
   { label: 'Admin', path: '/admin', icon: 'heroUserGroup', minRole: 'admin' },
   {
     label: 'Audit',

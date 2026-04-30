@@ -10,6 +10,7 @@
 } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { CurrencyPipe } from '@angular/common';
+import { NgIconComponent } from '@ng-icons/core';
 import { Lease, LeaseService, CreateLeaseData } from '../../../core/services/lease.service';
 import { Tenant, TenantService, CreateTenantData } from '../../../core/services/tenant.service';
 import { StorageService } from '../../../core/services/storage.service';
@@ -25,7 +26,7 @@ type WizardStep = 1 | 2 | 3 | 4;
 @Component({
   selector: 'app-new-tenancy-wizard',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, CurrencyPipe],
+  imports: [ReactiveFormsModule, CurrencyPipe, NgIconComponent],
   styles: `
     .wizard-property {
       font-size: 0.875rem;
@@ -85,12 +86,76 @@ type WizardStep = 1 | 2 | 3 | 4;
       align-self: center;
     }
 
-    .upload-box {
-      border: 1px dashed #a0aec0;
+    .drop-zone {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      border: 2px dashed #cbd5e0;
       border-radius: 0.5rem;
-      padding: 0.875rem;
+      padding: 2rem;
+      text-align: center;
+      cursor: pointer;
+      transition:
+        border-color 0.15s,
+        background 0.15s;
       margin-bottom: 1rem;
-      background: #f7fafc;
+
+      &:hover,
+      &.dragover {
+        border-color: #63b3ed;
+        background: #ebf8ff;
+      }
+    }
+
+    .drop-zone input[type='file'] {
+      display: none;
+    }
+
+    .drop-icon {
+      color: #a0aec0;
+      margin-bottom: 0.5rem;
+      display: flex;
+    }
+
+    .drop-label {
+      font-size: 0.9375rem;
+      color: #4a5568;
+      margin: 0;
+    }
+
+    .drop-hint {
+      font-size: 0.8125rem;
+      color: #a0aec0;
+      margin: 0.375rem 0 0;
+    }
+
+    .file-selected {
+      margin-top: 0.75rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      font-size: 0.875rem;
+      color: #2d3748;
+    }
+
+    .loading-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1rem;
+      padding: 2rem 0;
+      color: #718096;
+    }
+
+    .loading-spinner {
+      width: 2rem;
+      height: 2rem;
+      border: 3px solid #e2e8f0;
+      border-top-color: #2b6cb0;
+      border-radius: 50%;
+      animation: spin 0.75s linear infinite;
     }
 
     .btn-small {
@@ -353,14 +418,37 @@ type WizardStep = 1 | 2 | 3 | 4;
     </div>
 
     @if (step() === 1) {
-      <div class="upload-box">
-        <label for="lease_upload">Lease PDF *</label>
-        <input
-          id="lease_upload"
-          type="file"
-          accept="application/pdf,.pdf"
-          (change)="onLeaseDocumentSelected($event)"
-        />
+      @if (extractingLease()) {
+        <div class="loading-state">
+          <div class="loading-spinner"></div>
+          <span>Analyzing lease with AI…</span>
+        </div>
+      } @else {
+        <label
+          class="drop-zone"
+          [class.dragover]="dragover()"
+          (dragover)="onDragOver($event)"
+          (dragleave)="dragover.set(false)"
+          (drop)="onDrop($event)"
+        >
+          <input
+            type="file"
+            accept="application/pdf,.pdf"
+            (change)="onLeaseDocumentSelected($event)"
+          />
+          <div class="drop-icon">
+            <ng-icon name="heroDocumentArrowUp" size="32" />
+          </div>
+          <p class="drop-label">Drop lease PDF here or click to browse</p>
+          <p class="drop-hint">PDF only</p>
+          @if (selectedLeaseDocumentName()) {
+            <div class="file-selected">
+              <ng-icon name="heroDocumentText" size="16" />
+              {{ selectedLeaseDocumentName() }}
+            </div>
+          }
+        </label>
+
         @if (leaseExtractionError()) {
           <p class="error-msg">{{ leaseExtractionError() }}</p>
         }
@@ -387,31 +475,23 @@ type WizardStep = 1 | 2 | 3 | 4;
             </label>
           </div>
         }
-      </div>
 
-      @if (leaseError()) {
-        <p class="error-msg">{{ leaseError() }}</p>
-      }
+        @if (leaseError()) {
+          <p class="error-msg">{{ leaseError() }}</p>
+        }
 
-      <div class="btn-row">
-        <button type="button" class="btn-secondary" (click)="cancelled.emit()">Cancel</button>
-        <button
-          type="button"
-          class="btn-primary"
-          [disabled]="
-            !selectedLeaseDocument() ||
-            extractingLease() ||
-            (addressMismatch() && !mismatchAcknowledged())
-          "
-          (click)="proceedFromUpload()"
-        >
-          @if (extractingLease()) {
-            <span class="spinner"></span> Analyzing lease…
-          } @else {
+        <div class="btn-row">
+          <button type="button" class="btn-secondary" (click)="cancelled.emit()">Cancel</button>
+          <button
+            type="button"
+            class="btn-primary"
+            [disabled]="!selectedLeaseDocument() || (addressMismatch() && !mismatchAcknowledged())"
+            (click)="proceedFromUpload()"
+          >
             Next: Review Lease Details
-          }
-        </button>
-      </div>
+          </button>
+        </div>
+      }
     }
 
     @if (step() === 2) {
@@ -662,6 +742,7 @@ export class NewTenancyWizardComponent implements OnInit {
   readonly selectedLeaseDocument = signal<File | null>(null);
   readonly selectedLeaseDocumentName = signal<string | null>(null);
   readonly leaseDocumentPath = signal<string | null>(null);
+  readonly dragover = signal(false);
 
   readonly leaseForm = this.fb.nonNullable.group({
     start_date: ['', Validators.required],
@@ -778,19 +859,29 @@ export class NewTenancyWizardComponent implements OnInit {
   onLeaseDocumentSelected(event: Event): void {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0] ?? null;
+    input.value = '';
+    if (file) this.setLeaseFile(file);
+  }
 
-    if (!file) {
-      return;
-    }
+  onDragOver(event: DragEvent): void {
+    event.preventDefault();
+    this.dragover.set(true);
+  }
 
+  onDrop(event: DragEvent): void {
+    event.preventDefault();
+    this.dragover.set(false);
+    const file = event.dataTransfer?.files[0] ?? null;
+    if (file) this.setLeaseFile(file);
+  }
+
+  private setLeaseFile(file: File): void {
     if (!isPdfFile(file)) {
       this.selectedLeaseDocument.set(null);
       this.selectedLeaseDocumentName.set(null);
       this.leaseExtractionError.set('Only PDF files are supported for lease extraction.');
-      input.value = '';
       return;
     }
-
     this.selectedLeaseDocument.set(file);
     this.selectedLeaseDocumentName.set(file.name);
     this.leaseDocumentPath.set(null);

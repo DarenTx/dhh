@@ -21,6 +21,9 @@ import { Tenant, TenantService } from '../../../core/services/tenant.service';
 import { RoleService } from '../../../core/role/role.service';
 import { ExpenseService, ExpenseWithCategory } from '../../../core/services/expense.service';
 import { NotesSectionComponent } from '../../../shared/components/notes-section/notes-section.component';
+import { DocumentService, DocumentWithProperty } from '../../../core/services/document.service';
+import { DocumentUploadWizardComponent } from '../../documents/document-upload-wizard/document-upload-wizard.component';
+import { DocumentEditModalComponent } from '../../documents/document-edit-modal/document-edit-modal.component';
 import { PropertyFormComponent } from '../property-form/property-form.component';
 import { LeaseFormComponent } from '../lease-form/lease-form.component';
 import { LeaseTenantFormComponent } from '../lease-tenant-form/lease-tenant-form.component';
@@ -32,13 +35,14 @@ import {
 } from '../../../core/services/property-market-value.service';
 import { StorageService } from '../../../core/services/storage.service';
 
-type TabId = 'overview' | 'leases' | 'notes' | 'expenses' | 'market-values';
+type TabId = 'overview' | 'leases' | 'notes' | 'expenses' | 'market-values' | 'documents';
 
 const TABS: { id: TabId; label: string; managerOnly?: boolean }[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'leases', label: 'Leases' },
-  { id: 'notes', label: 'Notes' },
   { id: 'expenses', label: 'Expenses', managerOnly: true },
+  { id: 'documents', label: 'Documents' },
+  { id: 'notes', label: 'Notes' },
   { id: 'market-values', label: 'Market Values' },
 ];
 
@@ -53,6 +57,8 @@ const TABS: { id: TabId; label: string; managerOnly?: boolean }[] = [
     TitleCasePipe,
     NgIconComponent,
     NotesSectionComponent,
+    DocumentUploadWizardComponent,
+    DocumentEditModalComponent,
     PropertyFormComponent,
     LeaseFormComponent,
     LeaseTenantFormComponent,
@@ -95,8 +101,8 @@ const TABS: { id: TabId; label: string; managerOnly?: boolean }[] = [
     }
 
     .header-photo {
-      width: 132px;
-      height: 96px;
+      width: 200px;
+      height: 148px;
       object-fit: cover;
       border-radius: 0.875rem;
       border: 1px solid #e2e8f0;
@@ -124,8 +130,8 @@ const TABS: { id: TabId; label: string; managerOnly?: boolean }[] = [
     }
 
     .header-photo-placeholder {
-      width: 132px;
-      height: 96px;
+      width: 200px;
+      height: 148px;
       border-radius: 0.875rem;
       border: 1px solid #e2e8f0;
       background: linear-gradient(135deg, #f7fafc, #edf2f7);
@@ -168,8 +174,7 @@ const TABS: { id: TabId; label: string; managerOnly?: boolean }[] = [
       padding: 1.25rem;
       display: grid;
       gap: 0.875rem;
-      flex: 1 1 220px;
-      max-width: 320px;
+      flex: 1 1 280px;
       min-width: 0;
     }
 
@@ -539,22 +544,26 @@ const TABS: { id: TabId; label: string; managerOnly?: boolean }[] = [
           <div class="header-copy">
             <h1>{{ property()!.address_line1 }}</h1>
             <p class="sub">{{ property()!.city }}, {{ property()!.state }} {{ property()!.zip }}</p>
-            <div style="margin-top:0.5rem;display:flex;align-items:center;gap:0.5rem;">
+            <div
+              style="margin-top:0.5rem;display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;"
+            >
               @if (property()!.isOccupied) {
                 <span class="badge badge-occupied">Occupied</span>
               } @else {
                 <span class="badge badge-vacant">Vacant</span>
               }
+              @if (canManage()) {
+                <button
+                  class="btn-primary"
+                  style="padding:0.3rem 0.75rem;font-size:0.875rem"
+                  (click)="editProperty()"
+                >
+                  <ng-icon name="heroPencilSquare" size="15" />
+                  Edit Property
+                </button>
+              }
             </div>
           </div>
-        </div>
-        <div style="display:flex;gap:0.5rem;align-items:center;">
-          @if (canManage()) {
-            <button class="btn-primary" (click)="editProperty()">
-              <ng-icon name="heroPencilSquare" size="16" />
-              Edit
-            </button>
-          }
         </div>
       </div>
 
@@ -578,11 +587,11 @@ const TABS: { id: TabId; label: string; managerOnly?: boolean }[] = [
             <div class="overview-row">
               <!-- Active lease -->
               @if (leasesLoading() || tenantsLoading()) {
-                <div class="lease-card" style="flex:1 1 280px;max-width:400px;margin-bottom:0">
+                <div class="lease-card" style="flex:1 1 280px;margin-bottom:0">
                   <p class="loading" style="margin:0">Loading…</p>
                 </div>
               } @else if (activeLease()) {
-                <div class="lease-card" style="flex:1 1 280px;max-width:400px;margin-bottom:0">
+                <div class="lease-card" style="flex:1 1 280px;margin-bottom:0">
                   <h3>Lease — {{ activeLease()!.status | titlecase }}</h3>
                   <div class="lease-meta">
                     <span>Start: {{ activeLease()!.start_date | date: 'mediumDate' }}</span>
@@ -652,7 +661,7 @@ const TABS: { id: TabId; label: string; managerOnly?: boolean }[] = [
                   </div>
                 </div>
               } @else {
-                <div class="lease-card" style="flex:1 1 280px;max-width:400px;margin-bottom:0">
+                <div class="lease-card" style="flex:1 1 280px;margin-bottom:0">
                   <p style="margin:0;color:#a0aec0;font-size:0.9375rem">No active lease</p>
                   @if (canManage()) {
                     <button
@@ -894,6 +903,61 @@ const TABS: { id: TabId; label: string; managerOnly?: boolean }[] = [
               }
             }
           }
+
+          @case ('documents') {
+            @if (canManage()) {
+              <div class="action-bar">
+                <button class="btn-primary" (click)="showDocumentWizard.set(true)">
+                  <ng-icon name="heroPlus" size="16" />
+                  Add Document
+                </button>
+              </div>
+            }
+            @if (propertyDocsLoading()) {
+              <p class="loading">Loading documents…</p>
+            } @else if (propertyDocs().length === 0) {
+              <p class="empty">No documents uploaded for this property.</p>
+            } @else {
+              @for (doc of propertyDocs(); track doc.id) {
+                <div
+                  class="lease-card"
+                  style="display:flex;align-items:center;justify-content:space-between;gap:1rem;"
+                >
+                  <div>
+                    <p style="margin:0;font-size:1rem;font-weight:600;color:#2d3748">
+                      {{ doc.title }}
+                    </p>
+                    @if (doc.description) {
+                      <p style="margin:0;font-size:0.875rem;color:#718096">{{ doc.description }}</p>
+                    }
+                    <p style="margin:0.125rem 0 0;font-size:0.8125rem;color:#a0aec0">
+                      {{ doc.created_at | date: 'mediumDate' }}
+                    </p>
+                  </div>
+                  @if (canManage()) {
+                    <div style="display:flex;gap:0.5rem;flex-shrink:0">
+                      <button
+                        class="btn-primary"
+                        style="padding:0.375rem 0.75rem;font-size:0.8125rem"
+                        (click)="editingPropertyDoc.set(doc)"
+                      >
+                        <ng-icon name="heroPencilSquare" size="14" />
+                        Edit
+                      </button>
+                      <button
+                        class="btn-primary"
+                        style="padding:0.375rem 0.75rem;font-size:0.8125rem;background:#fc8181;border-color:#fc8181"
+                        (click)="onDeletePropertyDoc(doc)"
+                      >
+                        <ng-icon name="heroTrash" size="14" />
+                        Delete
+                      </button>
+                    </div>
+                  }
+                </div>
+              }
+            }
+          }
         }
       </div>
     }
@@ -965,6 +1029,31 @@ const TABS: { id: TabId; label: string; managerOnly?: boolean }[] = [
             [marketValue]="editingMarketValue()"
             (saved)="onMarketValueSaved($event)"
             (cancelled)="showMarketValueForm.set(false)"
+          />
+        </div>
+      </div>
+    }
+
+    <!-- Document upload wizard modal -->
+    @if (showDocumentWizard()) {
+      <div class="modal-backdrop" (click)="showDocumentWizard.set(false)">
+        <div class="modal" (click)="$event.stopPropagation()">
+          <app-document-upload-wizard
+            (saved)="onPropertyDocSaved()"
+            (cancelled)="showDocumentWizard.set(false)"
+          />
+        </div>
+      </div>
+    }
+
+    <!-- Document edit modal -->
+    @if (editingPropertyDoc()) {
+      <div class="modal-backdrop" (click)="editingPropertyDoc.set(null)">
+        <div class="modal" (click)="$event.stopPropagation()">
+          <app-document-edit-modal
+            [document]="editingPropertyDoc()!"
+            (saved)="onPropertyDocEditSaved()"
+            (cancelled)="editingPropertyDoc.set(null)"
           />
         </div>
       </div>
@@ -1063,6 +1152,13 @@ export class PropertyDetailPage implements OnInit {
   readonly marketValues = signal<PropertyMarketValue[]>([]);
   readonly marketValuesLoading = signal(false);
 
+  readonly propertyDocs = signal<DocumentWithProperty[]>([]);
+  readonly propertyDocsLoading = signal(false);
+  readonly showDocumentWizard = signal(false);
+  readonly editingPropertyDoc = signal<DocumentWithProperty | null>(null);
+
+  private readonly documentService = inject(DocumentService);
+
   canManage(): boolean {
     return this.roles.isManagerOrAbove();
   }
@@ -1079,9 +1175,44 @@ export class PropertyDetailPage implements OnInit {
     this.loadProperty(id);
     this.loadLeases(id);
     this.loadMarketValues(id);
+    this.loadPropertyDocs(id);
     if (this.canManage()) {
       this.loadExpenses(id);
     }
+  }
+
+  private loadPropertyDocs(propertyId: string): void {
+    this.propertyDocsLoading.set(true);
+    this.documentService.getByProperty(propertyId).subscribe({
+      next: (docs) => {
+        this.propertyDocs.set(docs);
+        this.propertyDocsLoading.set(false);
+      },
+      error: () => this.propertyDocsLoading.set(false),
+    });
+  }
+
+  onPropertyDocSaved(): void {
+    this.showDocumentWizard.set(false);
+    const id = this.route.snapshot.paramMap.get('id')!;
+    this.loadPropertyDocs(id);
+  }
+
+  onPropertyDocEditSaved(): void {
+    this.editingPropertyDoc.set(null);
+    const id = this.route.snapshot.paramMap.get('id')!;
+    this.loadPropertyDocs(id);
+  }
+
+  onDeletePropertyDoc(doc: DocumentWithProperty): void {
+    if (!confirm(`Delete "${doc.title}"? This action cannot be undone.`)) return;
+    this.documentService.delete(doc.id, doc.created_at, doc.storage_path).subscribe({
+      next: () => {
+        const id = this.route.snapshot.paramMap.get('id')!;
+        this.loadPropertyDocs(id);
+      },
+      error: (err: Error) => alert(err.message ?? 'Failed to delete document.'),
+    });
   }
 
   private loadProperty(id: string): void {

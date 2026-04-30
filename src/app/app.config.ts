@@ -24,6 +24,13 @@ import {
   heroXMark,
   heroPaperClip,
   heroDocument,
+  heroDocumentText,
+  heroDocumentArrowUp,
+  heroArrowDownTray,
+  heroSparkles,
+  heroPencil,
+  heroTrash,
+  heroCheck,
 } from '@ng-icons/heroicons/outline';
 
 import { routes } from './app.routes';
@@ -58,6 +65,13 @@ export const appConfig: ApplicationConfig = {
       heroXMark,
       heroPaperClip,
       heroDocument,
+      heroDocumentText,
+      heroDocumentArrowUp,
+      heroArrowDownTray,
+      heroSparkles,
+      heroPencil,
+      heroTrash,
+      heroCheck,
     }),
     provideServiceWorker('ngsw-worker.js', {
       enabled: !isDevMode(),

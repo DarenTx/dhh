@@ -86,20 +86,48 @@ type WizardStep = 1 | 2 | 3;
       align-self: center;
     }
 
-    .upload-box {
-      border: 1px dashed #a0aec0;
+    .drop-zone {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      border: 2px dashed #cbd5e0;
       border-radius: 0.5rem;
-      padding: 0.875rem;
+      padding: 2rem;
+      text-align: center;
+      cursor: pointer;
+      transition:
+        border-color 0.15s,
+        background 0.15s;
       margin-bottom: 1rem;
-      background: #f7fafc;
+
+      &:hover,
+      &.dragover {
+        border-color: #63b3ed;
+        background: #ebf8ff;
+      }
     }
 
-    .upload-box-label {
-      font-size: 0.875rem;
-      font-weight: 500;
-      color: #4a5568;
+    .drop-zone input[type='file'] {
+      display: none;
+    }
+
+    .drop-icon {
+      color: #a0aec0;
       margin-bottom: 0.5rem;
-      display: block;
+      display: flex;
+    }
+
+    .drop-label {
+      font-size: 0.9375rem;
+      color: #4a5568;
+      margin: 0;
+    }
+
+    .drop-hint {
+      font-size: 0.8125rem;
+      color: #a0aec0;
+      margin: 0.375rem 0 0;
     }
 
     .evidence-list {
@@ -130,27 +158,22 @@ type WizardStep = 1 | 2 | 3;
       align-items: center;
     }
 
-    .upload-btn {
+    .loading-state {
       display: flex;
+      flex-direction: column;
       align-items: center;
-      gap: 0.375rem;
-      padding: 0.375rem 0.75rem;
-      border: 1px dashed #cbd5e0;
-      border-radius: 0.375rem;
-      background: #fff;
-      cursor: pointer;
-      font-size: 0.875rem;
-      color: #4a5568;
-      width: fit-content;
-      margin-bottom: 0.75rem;
+      gap: 1rem;
+      padding: 2rem 0;
+      color: #718096;
     }
 
-    .upload-actions {
-      display: flex;
-      gap: 0.625rem;
-      align-items: center;
-      flex-wrap: wrap;
-      margin-top: 0.5rem;
+    .loading-spinner {
+      width: 2rem;
+      height: 2rem;
+      border: 3px solid #e2e8f0;
+      border-top-color: #2b6cb0;
+      border-radius: 50%;
+      animation: spin 0.75s linear infinite;
     }
 
     .btn-small {
@@ -351,35 +374,48 @@ type WizardStep = 1 | 2 | 3;
     </div>
 
     @if (step() === 1) {
-      <div class="upload-box">
-        <span class="upload-box-label">Supporting Documents * (at least 1 required)</span>
-
-        <div class="evidence-list">
-          @for (f of pendingFiles(); track $index) {
-            <div class="evidence-item">
-              <span>{{ f.name }}</span>
-              <button
-                type="button"
-                class="evidence-remove"
-                (click)="removeFile($index)"
-                aria-label="Remove"
-              >
-                <ng-icon name="heroXMark" size="16" />
-              </button>
-            </div>
-          }
+      @if (extractingAi()) {
+        <div class="loading-state">
+          <div class="loading-spinner"></div>
+          <span>Analyzing receipt with AI…</span>
         </div>
+      } @else {
+        @if (pendingFiles().length > 0) {
+          <div class="evidence-list">
+            @for (f of pendingFiles(); track $index) {
+              <div class="evidence-item">
+                <span>{{ f.name }}</span>
+                <button
+                  type="button"
+                  class="evidence-remove"
+                  (click)="removeFile($index)"
+                  aria-label="Remove"
+                >
+                  <ng-icon name="heroXMark" size="16" />
+                </button>
+              </div>
+            }
+          </div>
+        }
 
-        <label class="upload-btn">
-          <ng-icon name="heroPaperClip" size="16" />
-          Attach file
+        <label
+          class="drop-zone"
+          [class.dragover]="dragover()"
+          (dragover)="onDragOver($event)"
+          (dragleave)="dragover.set(false)"
+          (drop)="onDrop($event)"
+        >
           <input
             type="file"
             accept="image/jpeg,image/png,image/webp,image/heic,application/pdf"
-            style="display:none"
             multiple
             (change)="onFileSelected($event)"
           />
+          <div class="drop-icon">
+            <ng-icon name="heroDocumentArrowUp" size="32" />
+          </div>
+          <p class="drop-label">Drop receipts here or click to attach</p>
+          <p class="drop-hint">Images or PDF · multiple allowed</p>
         </label>
 
         @if (extractionError()) {
@@ -388,27 +424,22 @@ type WizardStep = 1 | 2 | 3;
         @for (w of extractionWarnings(); track w) {
           <p class="warn-msg">{{ w }}</p>
         }
-      </div>
+        @if (uploadStepError()) {
+          <p class="error-msg">{{ uploadStepError() }}</p>
+        }
 
-      @if (uploadStepError()) {
-        <p class="error-msg">{{ uploadStepError() }}</p>
-      }
-
-      <div class="btn-row">
-        <button type="button" class="btn-secondary" (click)="cancelled.emit()">Cancel</button>
-        <button
-          type="button"
-          class="btn-primary"
-          [disabled]="pendingFiles().length === 0 || extractingAi()"
-          (click)="proceedFromUpload()"
-        >
-          @if (extractingAi()) {
-            <span class="spinner"></span> Analyzing receipt…
-          } @else {
+        <div class="btn-row">
+          <button type="button" class="btn-secondary" (click)="cancelled.emit()">Cancel</button>
+          <button
+            type="button"
+            class="btn-primary"
+            [disabled]="pendingFiles().length === 0"
+            (click)="proceedFromUpload()"
+          >
             Next: Review Expense Details
-          }
-        </button>
-      </div>
+          </button>
+        </div>
+      }
     }
 
     @if (step() === 2) {
@@ -590,6 +621,7 @@ export class ExpenseFormComponent implements OnInit {
   readonly extractingAi = signal(false);
   readonly extractionError = signal<string | null>(null);
   readonly extractionWarnings = signal<string[]>([]);
+  readonly dragover = signal(false);
 
   readonly selectedCategoryName = computed(
     () =>
@@ -753,6 +785,22 @@ export class ExpenseFormComponent implements OnInit {
   removeFile(index: number): void {
     this.pendingFiles.update((prev) => prev.filter((_, i) => i !== index));
     this.extractionError.set(null);
+  }
+
+  onDragOver(event: DragEvent): void {
+    event.preventDefault();
+    this.dragover.set(true);
+  }
+
+  onDrop(event: DragEvent): void {
+    event.preventDefault();
+    this.dragover.set(false);
+    const files = event.dataTransfer?.files;
+    if (files?.length) {
+      this.pendingFiles.update((prev) => [...prev, ...Array.from(files)]);
+      this.extractionError.set(null);
+      this.extractionWarnings.set([]);
+    }
   }
 
   runAiExtraction(): void {

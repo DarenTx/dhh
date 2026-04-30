@@ -69,6 +69,36 @@ export interface ExpenseExtractionResult {
   extraction_status: 'completed' | 'partial';
 }
 
+export interface DocumentPropertyOption {
+  id: string | null;
+  address: string;
+}
+
+export interface DocumentExtractionRequest {
+  extraction_draft_id?: string;
+  storage_bucket: string;
+  storage_path: string;
+  properties: DocumentPropertyOption[];
+}
+
+export interface DocumentExtractionResult {
+  extraction_draft_id: string;
+  extracted_fields: {
+    title: string | null;
+    description: string | null;
+    property_id: string | null;
+  };
+  confidence_by_field: Record<string, number>;
+  missing_fields: string[];
+  warnings: string[];
+  provider_metadata: {
+    provider: 'gemini';
+    model: string;
+    request_id?: string;
+  };
+  extraction_status: 'completed' | 'partial';
+}
+
 @Injectable({ providedIn: 'root' })
 export class AiExtractionService {
   private readonly supabase = inject<SupabaseClient>(SUPABASE_CLIENT);
@@ -91,6 +121,17 @@ export class AiExtractionService {
         .then(async ({ data, error }) => {
           if (error) throw new Error(await extractFunctionErrorMessage(error));
           return data as ExpenseExtractionResult;
+        }),
+    );
+  }
+
+  extractDocument(payload: DocumentExtractionRequest): Observable<DocumentExtractionResult> {
+    return from(
+      this.supabase.functions
+        .invoke('extract-document', { body: payload })
+        .then(async ({ data, error }) => {
+          if (error) throw new Error(await extractFunctionErrorMessage(error));
+          return data as DocumentExtractionResult;
         }),
     );
   }
