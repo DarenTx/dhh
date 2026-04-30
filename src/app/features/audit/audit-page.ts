@@ -388,7 +388,6 @@ function describeAuditRow(row: AuditRow): string {
                 <tr class="expandable" (click)="toggleRow(row.id)">
                   <td>{{ row.performed_at | date: 'M/d/yy h:mm a' }}</td>
                   <td>{{ describe(row) }}</td>
-
                 </tr>
                 @if (expandedRowId() === row.id) {
                   <tr class="diff-row">
