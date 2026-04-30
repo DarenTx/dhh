@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
-import { DatePipe, JsonPipe, SlicePipe } from '@angular/common';
+import { DatePipe, JsonPipe } from '@angular/common';
 import { NgIconComponent } from '@ng-icons/core';
 import { AuditRow, AuditService, AuditLoadParams } from '../../core/services/audit.service';
 
@@ -140,6 +140,20 @@ function describeAuditRow(row: AuditRow): string {
       if (op === 'DELETE') return `${actor} removed an approval requirement`;
       return `${actor} updated an approval requirement`;
     }
+
+    case 'documents': {
+      const title = d['title'] ?? 'a document';
+      if (op === 'INSERT') return `${actor} uploaded document: ${title}`;
+      if (op === 'DELETE') return `${actor} deleted document: ${title}`;
+      if (op === 'UPDATE') {
+        if (d['is_active'] === false && prev['is_active'] !== false)
+          return `${actor} archived document: ${title}`;
+        if (d['is_active'] === true && prev['is_active'] !== true)
+          return `${actor} restored document: ${title}`;
+        return `${actor} updated document: ${title}`;
+      }
+      break;
+    }
   }
 
   // Generic fallback
@@ -155,7 +169,7 @@ function describeAuditRow(row: AuditRow): string {
 @Component({
   selector: 'app-audit-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, DatePipe, JsonPipe, SlicePipe, NgIconComponent],
+  imports: [FormsModule, DatePipe, JsonPipe, NgIconComponent],
   styles: `
     :host {
       display: block;
@@ -366,31 +380,30 @@ function describeAuditRow(row: AuditRow): string {
             <tr>
               <th style="width: 10rem">Timestamp</th>
               <th>Description</th>
-              <th style="width: 8rem">Record ID</th>
             </tr>
           </thead>
           <tbody>
             @for (row of rows(); track row.id) {
-              <tr class="expandable" (click)="toggleRow(row.id)">
-                <td>{{ row.performed_at | date: 'M/d/yy h:mm a' }}</td>
-                <td>{{ describe(row) }}</td>
-                <td style="font-size: 0.75rem; color: #a0aec0; font-family: monospace">
-                  {{ row.record_id | slice: 0 : 8 }}…
-                </td>
-              </tr>
-              @if (expandedRowId() === row.id) {
-                <tr class="diff-row">
-                  <td colspan="3">
-                    <div class="diff-meta">
-                      <span class="diff-table">{{ row.table_name }}</span>
-                      <span class="op-badge op-{{ row.operation }}">{{ row.operation }}</span>
-                    </div>
-                    <strong>Before:</strong>
-                    <pre>{{ row.old_data | json }}</pre>
-                    <strong>After:</strong>
-                    <pre>{{ row.new_data | json }}</pre>
-                  </td>
+              @if (row.performer_display) {
+                <tr class="expandable" (click)="toggleRow(row.id)">
+                  <td>{{ row.performed_at | date: 'M/d/yy h:mm a' }}</td>
+                  <td>{{ describe(row) }}</td>
+
                 </tr>
+                @if (expandedRowId() === row.id) {
+                  <tr class="diff-row">
+                    <td colspan="3">
+                      <div class="diff-meta">
+                        <span class="diff-table">{{ row.table_name }}</span>
+                        <span class="op-badge op-{{ row.operation }}">{{ row.operation }}</span>
+                      </div>
+                      <strong>Before:</strong>
+                      <pre>{{ row.old_data | json }}</pre>
+                      <strong>After:</strong>
+                      <pre>{{ row.new_data | json }}</pre>
+                    </td>
+                  </tr>
+                }
               }
             }
           </tbody>
