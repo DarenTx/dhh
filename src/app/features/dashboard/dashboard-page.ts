@@ -185,17 +185,16 @@ interface DashboardStats {
     }
 
     .approval-count {
-      min-width: 1.375rem;
-      height: 1.375rem;
-      padding: 0 0.375rem;
-      background: #e53e3e;
+      padding: 0.1875rem 0.5rem;
+      background: #c53030;
       color: #fff;
-      border-radius: 9999px;
-      font-size: 0.75rem;
-      font-weight: 700;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
+      border-radius: 0.25rem;
+      font-family: ui-rounded, 'SF Pro Rounded', system-ui, sans-serif;
+      font-size: 0.8125rem;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.01em;
+      flex-shrink: 0;
     }
 
     .expense-row {
