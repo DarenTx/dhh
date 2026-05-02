@@ -21,6 +21,14 @@ export interface ExpenseSubcategory {
   created_at: string;
 }
 
+export interface InspectionTag {
+  id: string;
+  room_type: string;
+  name: string;
+  is_active: boolean;
+  created_at: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class SettingsService {
   private readonly supabase = inject<SupabaseClient>(SUPABASE_CLIENT);
@@ -97,6 +105,44 @@ export class SettingsService {
     return from(
       this.supabase
         .from('expense_subcategories')
+        .update({ is_active: false })
+        .eq('id', id)
+        .then(({ error }) => {
+          if (error) throw error;
+        }),
+    );
+  }
+
+  getInspectionTags(): Observable<InspectionTag[]> {
+    return from(
+      this.supabase
+        .from('inspection_tags')
+        .select('id, room_type, name, is_active, created_at')
+        .eq('is_active', true)
+        .order('room_type')
+        .order('name')
+        .then(({ data, error }) => {
+          if (error) throw error;
+          return (data ?? []) as InspectionTag[];
+        }),
+    );
+  }
+
+  addInspectionTag(roomType: string, name: string): Observable<void> {
+    return from(
+      this.supabase
+        .from('inspection_tags')
+        .insert({ room_type: roomType, name })
+        .then(({ error }) => {
+          if (error) throw error;
+        }),
+    );
+  }
+
+  disableInspectionTag(id: string): Observable<void> {
+    return from(
+      this.supabase
+        .from('inspection_tags')
         .update({ is_active: false })
         .eq('id', id)
         .then(({ error }) => {

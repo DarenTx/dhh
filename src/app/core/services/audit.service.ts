@@ -46,6 +46,8 @@ export class AuditService {
       .order('performed_at', { ascending: false })
       .neq('table_name', 'ai_extraction_drafts')
       .neq('table_name', 'approval_requirements')
+      .neq('table_name', 'inspection_rooms')
+      .neq('table_name', 'inspection_photo_tags')
       .range(start, end);
 
     if (fromDate) query = query.gte('performed_at', fromDate);

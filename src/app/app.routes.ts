@@ -68,6 +68,14 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/documents/documents-page').then((m) => m.DocumentsPage),
       },
+      {
+        path: 'properties/:propertyId/inspections/:inspectionId',
+        loadComponent: () =>
+          import('./features/inspections/inspection-page/inspection-page.component').then(
+            (m) => m.InspectionPageComponent,
+          ),
+        canActivate: [authGuard],
+      },
     ],
   },
   { path: '**', redirectTo: '' },

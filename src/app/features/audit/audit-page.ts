@@ -154,6 +154,42 @@ function describeAuditRow(row: AuditRow): string {
       }
       break;
     }
+
+    case 'inspections': {
+      const inTitle = d['title'] ?? prev['title'] ?? 'an inspection';
+      if (op === 'INSERT') return `${actor} started inspection: ${inTitle}`;
+      if (op === 'DELETE') return `${actor} deleted inspection: ${inTitle}`;
+      if (op === 'UPDATE') {
+        if (d['status'] === 'completed') return `${actor} completed inspection: ${inTitle}`;
+        if (d['status'] === 'in_progress') return `${actor} reopened inspection: ${inTitle}`;
+        if (d['is_active'] === false) return `${actor} deleted inspection: ${inTitle}`;
+        return `${actor} updated inspection: ${inTitle}`;
+      }
+      break;
+    }
+
+    case 'inspection_photos': {
+      if (op === 'INSERT') return `${actor} added a photo to an inspection room`;
+      if (op === 'DELETE') return `${actor} deleted an inspection photo`;
+      if (op === 'UPDATE') {
+        if (d['is_resolved'] === true) return `${actor} resolved an inspection action item`;
+        if (d['is_actionable'] === true) return `${actor} flagged a photo as actionable`;
+        if (d['description'] !== undefined) return `${actor} updated a photo description`;
+        return `${actor} updated an inspection photo`;
+      }
+      break;
+    }
+
+    case 'inspection_tags': {
+      const tagName = d['name'] ?? prev['name'] ?? 'a tag';
+      if (op === 'INSERT') return `${actor} added inspection tag: ${tagName}`;
+      if (op === 'UPDATE') {
+        if (d['is_active'] === false) return `${actor} disabled inspection tag: ${tagName}`;
+        return `${actor} updated inspection tag: ${tagName}`;
+      }
+      if (op === 'DELETE') return `${actor} deleted inspection tag: ${tagName}`;
+      break;
+    }
   }
 
   // Generic fallback

@@ -34,8 +34,16 @@ import {
   PropertyMarketValueService,
 } from '../../../core/services/property-market-value.service';
 import { StorageService } from '../../../core/services/storage.service';
+import { InspectionsTabComponent } from '../../inspections/inspections-tab/inspections-tab.component';
 
-type TabId = 'overview' | 'leases' | 'notes' | 'expenses' | 'market-values' | 'documents';
+type TabId =
+  | 'overview'
+  | 'leases'
+  | 'notes'
+  | 'expenses'
+  | 'market-values'
+  | 'documents'
+  | 'inspections';
 
 const TABS: { id: TabId; label: string; managerOnly?: boolean }[] = [
   { id: 'overview', label: 'Overview' },
@@ -44,6 +52,7 @@ const TABS: { id: TabId; label: string; managerOnly?: boolean }[] = [
   { id: 'documents', label: 'Documents' },
   { id: 'notes', label: 'Notes' },
   { id: 'market-values', label: 'Market Values' },
+  { id: 'inspections', label: 'Inspections' },
 ];
 
 @Component({
@@ -64,6 +73,7 @@ const TABS: { id: TabId; label: string; managerOnly?: boolean }[] = [
     LeaseTenantFormComponent,
     NewTenancyWizardComponent,
     MarketValueFormComponent,
+    InspectionsTabComponent,
   ],
   styles: `
     .breadcrumb {
@@ -958,6 +968,14 @@ const TABS: { id: TabId; label: string; managerOnly?: boolean }[] = [
               }
             }
           }
+          @case ('inspections') {
+            <app-inspections-tab
+              [propertyId]="property()!.id"
+              [bedrooms]="property()!.bedrooms"
+              [bathrooms]="property()!.bathrooms"
+              [leases]="leases()"
+            />
+          }
         }
       </div>
     }
@@ -1172,6 +1190,10 @@ export class PropertyDetailPage implements OnInit {
 
   ngOnInit(): void {
     const id = this.route.snapshot.paramMap.get('id')!;
+    const tab = this.route.snapshot.queryParamMap.get('tab') as TabId | null;
+    if (tab && TABS.some((t) => t.id === tab)) {
+      this.activeTab.set(tab);
+    }
     this.loadProperty(id);
     this.loadLeases(id);
     this.loadMarketValues(id);
