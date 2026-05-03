@@ -142,7 +142,8 @@ import { PropertyWithOccupancy } from '../../../core/services/property.service';
 
         @if (property().latestMarketValue) {
           <p class="market-value">
-            Est. value: {{ property().latestMarketValue!.market_value | currency }}
+            Est. value:
+            {{ property().latestMarketValue!.market_value | currency: 'USD' : 'symbol' : '1.0-0' }}
           </p>
         }
       </div>
