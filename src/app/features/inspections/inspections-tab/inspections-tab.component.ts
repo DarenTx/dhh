@@ -77,6 +77,30 @@ import {
       }
     }
 
+    .inspection-card-layout {
+      display: flex;
+      gap: 1rem;
+      align-items: flex-start;
+    }
+
+    .inspection-cover {
+      width: 5.5rem;
+      height: 5.5rem;
+      object-fit: cover;
+      border-radius: 0.625rem;
+      border: 1px solid #e2e8f0;
+      background: #edf2f7;
+      flex-shrink: 0;
+    }
+
+    .inspection-card-body {
+      min-width: 0;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
     .card-header {
       display: flex;
       align-items: center;
@@ -270,29 +294,41 @@ import {
       <div class="inspection-list">
         @for (insp of inspections(); track insp.id) {
           <div class="inspection-card" (click)="openInspection(insp)">
-            <div class="card-header">
-              <p class="card-title">{{ insp.title }}</p>
-              <span
-                class="badge"
-                [class.in-progress]="isActive(insp)"
-                [class.completed]="!isActive(insp)"
-              >
-                {{ isActive(insp) ? 'Active' : 'Completed' }}
-              </span>
-            </div>
-            <div class="card-meta">
-              <span>{{ typeLabel(insp.inspection_type) }}</span>
-              <span>{{ insp.created_at | date: 'mediumDate' }}</span>
-            </div>
-            <div class="card-stats">
-              <span>{{ insp.photoCount }} photo{{ insp.photoCount === 1 ? '' : 's' }}</span>
-              @if (insp.unresolvedActionableCount > 0) {
-                <span class="stat-warn"
-                  >{{ insp.unresolvedActionableCount }} unresolved action item{{
-                    insp.unresolvedActionableCount === 1 ? '' : 's'
-                  }}</span
-                >
+            <div class="inspection-card-layout">
+              @if (insp.coverPhotoUrl) {
+                <img
+                  class="inspection-cover"
+                  [src]="insp.coverPhotoUrl"
+                  [alt]="insp.title + ' cover photo'"
+                  loading="lazy"
+                />
               }
+              <div class="inspection-card-body">
+                <div class="card-header">
+                  <p class="card-title">{{ insp.title }}</p>
+                  <span
+                    class="badge"
+                    [class.in-progress]="isActive(insp)"
+                    [class.completed]="!isActive(insp)"
+                  >
+                    {{ isActive(insp) ? 'Active' : 'Completed' }}
+                  </span>
+                </div>
+                <div class="card-meta">
+                  <span>{{ typeLabel(insp.inspection_type) }}</span>
+                  <span>{{ insp.created_at | date: 'mediumDate' }}</span>
+                </div>
+                <div class="card-stats">
+                  <span>{{ insp.photoCount }} photo{{ insp.photoCount === 1 ? '' : 's' }}</span>
+                  @if (insp.unresolvedActionableCount > 0) {
+                    <span class="stat-warn"
+                      >{{ insp.unresolvedActionableCount }} unresolved action item{{
+                        insp.unresolvedActionableCount === 1 ? '' : 's'
+                      }}</span
+                    >
+                  }
+                </div>
+              </div>
             </div>
           </div>
         }

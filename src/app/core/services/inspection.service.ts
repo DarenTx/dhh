@@ -38,26 +38,59 @@ export class InspectionService {
         return from(
           this.supabase
             .from('inspection_photos')
-            .select('inspection_id, is_actionable, is_resolved')
+            .select('id, inspection_id, is_actionable, is_resolved, storage_path')
             .in('inspection_id', ids)
             .then(({ data: allPhotos, error: allErr }) => {
               if (allErr) throw allErr;
 
               const photoMap = new Map<string, number>();
               const unresolvedMap = new Map<string, number>();
+              const coverPathMap = new Map<string, string>();
               for (const row of allPhotos ?? []) {
                 const iid = (row as any).inspection_id as string;
                 photoMap.set(iid, (photoMap.get(iid) ?? 0) + 1);
                 if ((row as any).is_actionable && !(row as any).is_resolved) {
                   unresolvedMap.set(iid, (unresolvedMap.get(iid) ?? 0) + 1);
                 }
+                const photoId = (row as any).id as string;
+                const storagePath = (row as any).storage_path as string;
+                const inspection = inspections.find((insp) => insp.id === iid);
+                if (inspection?.cover_photo_id === photoId && storagePath) {
+                  coverPathMap.set(iid, storagePath);
+                }
               }
 
-              return inspections.map((insp) => ({
+              const withCounts = inspections.map((insp) => ({
                 ...insp,
                 photoCount: photoMap.get(insp.id) ?? 0,
                 unresolvedActionableCount: unresolvedMap.get(insp.id) ?? 0,
+                coverPhotoUrl: null,
               }));
+
+              const coverPaths = withCounts
+                .map((insp) => coverPathMap.get(insp.id) ?? null)
+                .filter((path): path is string => !!path);
+
+              if (coverPaths.length === 0) {
+                return withCounts;
+              }
+
+              return this.supabase.storage
+                .from('inspection-photos')
+                .createSignedUrls(coverPaths, 3600)
+                .then(({ data: signed, error: signedErr }) => {
+                  if (signedErr) throw signedErr;
+                  const urlMap = new Map<string, string>();
+                  coverPaths.forEach((path, index) => {
+                    const signedUrl = signed?.[index]?.signedUrl;
+                    if (signedUrl) urlMap.set(path, signedUrl);
+                  });
+
+                  return withCounts.map((insp) => ({
+                    ...insp,
+                    coverPhotoUrl: urlMap.get(coverPathMap.get(insp.id) ?? '') ?? null,
+                  }));
+                });
             }),
         );
       }),

@@ -239,17 +239,6 @@ import { InspectionPhoto, InspectionTag, isWithin24h } from '../../inspection.ty
                   Action Item
                 </button>
 
-                @if (photo.is_actionable) {
-                  <button
-                    class="action-btn"
-                    [class.active]="photo.is_resolved"
-                    (click)="toggleResolved(photo)"
-                  >
-                    <ng-icon name="heroCheckCircle" size="13" />
-                    {{ photo.is_resolved ? 'Resolved' : 'Mark Resolved' }}
-                  </button>
-                }
-
                 @if (canDelete(photo)) {
                   <button class="action-btn danger" (click)="deletePhoto(photo)">
                     <ng-icon name="heroTrash" size="13" />
@@ -411,13 +400,6 @@ export class PhotoCaptureComponent {
     const patch = is_actionable ? { is_actionable } : { is_actionable, is_resolved: false };
     this.photoService.updatePhoto(photo.id, patch).subscribe({
       next: () => this.updatePhotoInList(photo.id, patch),
-    });
-  }
-
-  toggleResolved(photo: InspectionPhoto): void {
-    const is_resolved = !photo.is_resolved;
-    this.photoService.updatePhoto(photo.id, { is_resolved }).subscribe({
-      next: () => this.updatePhotoInList(photo.id, { is_resolved }),
     });
   }
 

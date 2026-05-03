@@ -43,6 +43,16 @@ import { PhotoCaptureComponent } from './photo-capture/photo-capture.component';
       min-width: 0;
     }
 
+    .top-bar-cover {
+      width: 3rem;
+      height: 3rem;
+      border-radius: 0.625rem;
+      object-fit: cover;
+      background: #edf2f7;
+      border: 1px solid #e2e8f0;
+      flex-shrink: 0;
+    }
+
     .top-bar-title h1 {
       margin: 0;
       font-size: 1rem;
@@ -180,6 +190,9 @@ import { PhotoCaptureComponent } from './photo-capture/photo-capture.component';
       <button class="icon-btn" (click)="back.emit()" aria-label="Back">
         <ng-icon name="heroChevronLeft" size="22" />
       </button>
+      @if (coverUrl()) {
+        <img class="top-bar-cover" [src]="coverUrl()!" alt="Inspection cover photo" />
+      }
       <div class="top-bar-title">
         <h1>{{ propertyAddress() || inspection().title }}</h1>
         <p>{{ inspection().title }} · {{ typeLabel() }}</p>
@@ -237,15 +250,18 @@ export class InspectionWizardComponent {
 
   readonly activeRoomIndex = signal(0);
   readonly coverPhotoId = signal<string | null>(null);
+  readonly coverUrl = signal<string | null>(null);
   readonly roomPhotoCounts = signal<Partial<Record<string, number>>>({});
 
   private readonly _loadPhotoCountsEffect = effect(() => {
     const rooms = this.rooms();
+    const activeCoverId = this.coverPhotoId() ?? this.inspection().cover_photo_id;
     if (rooms.length === 0) {
       this.roomPhotoCounts.set({});
+      this.coverUrl.set(null);
       return;
     }
-    this.loadRoomPhotoCounts(rooms);
+    this.loadRoomPhotoData(rooms, activeCoverId);
   });
 
   readonly activeRoom = computed(() => this.rooms()[this.activeRoomIndex()] ?? null);
@@ -262,7 +278,7 @@ export class InspectionWizardComponent {
     }));
   }
 
-  private loadRoomPhotoCounts(rooms: InspectionRoom[]): void {
+  private loadRoomPhotoData(rooms: InspectionRoom[], activeCoverId: string | null): void {
     const requests = rooms.map((room) => this.photoService.getPhotosForRoom(room.id));
     forkJoin(requests).subscribe({
       next: (photoGroups) => {
@@ -271,6 +287,22 @@ export class InspectionWizardComponent {
           counts[rooms[i].id] = photoGroups[i]?.length ?? 0;
         }
         this.roomPhotoCounts.set(counts);
+
+        if (!activeCoverId) {
+          this.coverUrl.set(null);
+          return;
+        }
+
+        const coverPhoto = photoGroups.flat().find((photo) => photo.id === activeCoverId);
+        if (!coverPhoto?.storage_path) {
+          this.coverUrl.set(null);
+          return;
+        }
+
+        this.photoService.getSignedUrl(coverPhoto.storage_path).subscribe({
+          next: (url) => this.coverUrl.set(url),
+          error: () => this.coverUrl.set(null),
+        });
       },
       error: () => {
         const counts: Record<string, number> = {};
@@ -278,6 +310,7 @@ export class InspectionWizardComponent {
           counts[room.id] = this.roomPhotoCounts()[room.id] ?? 0;
         }
         this.roomPhotoCounts.set(counts);
+        this.coverUrl.set(null);
       },
     });
   }
