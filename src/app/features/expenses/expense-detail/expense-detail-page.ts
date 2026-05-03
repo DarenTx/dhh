@@ -602,7 +602,6 @@ import { PropertyService } from '../../../core/services/property.service';
                 <input
                   id="edit-amount"
                   type="number"
-                  step="0.01"
                   min="0.01"
                   formControlName="amount"
                   [class.invalid]="
@@ -684,7 +683,8 @@ import { PropertyService } from '../../../core/services/property.service';
                   editForm.get('property_id')?.touched && editForm.get('property_id')?.invalid
                 "
               >
-                <option value="">Select propertyâ€¦</option>
+                <option value="">Select property or LLC…</option>
+                <option [value]="llcPropertyValue">LLC-wide</option>
                 @for (prop of editProperties(); track prop.id) {
                   <option [value]="prop.id">{{ prop.address_line1 }}</option>
                 }
@@ -693,7 +693,7 @@ import { PropertyService } from '../../../core/services/property.service';
                 editForm.get('property_id')?.touched &&
                 editForm.get('property_id')?.hasError('required')
               ) {
-                <span class="error-msg">Property is required.</span>
+                <span class="error-msg">Property or LLC is required.</span>
               }
             </div>
             <div class="btn-row">
@@ -802,6 +802,7 @@ export class ExpenseDetailPage implements OnInit {
 
   // Edit state
   readonly showEditForm = signal(false);
+  readonly llcPropertyValue = '__LLC__';
   readonly editSaving = signal(false);
   readonly editError = signal<string | null>(null);
   readonly editCategories = signal<IrsCategory[]>([]);
@@ -876,7 +877,7 @@ export class ExpenseDetailPage implements OnInit {
       description: e.description,
       irs_category_id: String(e.irs_category_id),
       subcategory_id: e.subcategory_id,
-      property_id: e.property_id ?? '',
+      property_id: e.property_id ?? this.llcPropertyValue,
     });
     this.settingsService.getCategories().subscribe((cats) => this.editCategories.set(cats));
     this.propertyService
@@ -913,7 +914,7 @@ export class ExpenseDetailPage implements OnInit {
       description: v.description!,
       irs_category_id: Number(v.irs_category_id),
       subcategory_id: v.subcategory_id!,
-      property_id: v.property_id || null,
+      property_id: v.property_id && v.property_id !== this.llcPropertyValue ? v.property_id : null,
     };
     this.editSaving.set(true);
     this.editError.set(null);

@@ -537,13 +537,14 @@ type WizardStep = 1 | 2 | 3;
             formControlName="property_id"
             [class.invalid]="form.get('property_id')?.touched && form.get('property_id')?.invalid"
           >
-            <option value="">Select property…</option>
+            <option value="">Select property or LLC…</option>
+            <option [value]="llcPropertyValue">LLC-wide</option>
             @for (prop of properties(); track prop.id) {
               <option [value]="prop.id">{{ prop.address_line1 }}</option>
             }
           </select>
           @if (form.get('property_id')?.touched && form.get('property_id')?.hasError('required')) {
-            <span class="error-msg">Property is required.</span>
+            <span class="error-msg">Property or LLC is required.</span>
           }
         </div>
 
@@ -602,6 +603,7 @@ type WizardStep = 1 | 2 | 3;
 export class ExpenseFormComponent implements OnInit {
   readonly saved = output<Expense>();
   readonly cancelled = output<void>();
+  readonly llcPropertyValue = '__LLC__';
 
   private readonly expenseService = inject(ExpenseService);
   private readonly evidenceService = inject(ExpenseEvidenceService);
@@ -634,11 +636,13 @@ export class ExpenseFormComponent implements OnInit {
       this.subcategories().find((s) => s.id === this.form.get('subcategory_id')?.value)?.name ?? '',
   );
 
-  readonly selectedPropertyName = computed(
-    () =>
-      this.properties().find((p) => p.id === this.form.get('property_id')?.value)?.address_line1 ??
-      '',
-  );
+  readonly selectedPropertyName = computed(() => {
+    const selected = this.form.get('property_id')?.value;
+    if (selected === this.llcPropertyValue) {
+      return 'LLC-wide';
+    }
+    return this.properties().find((p) => p.id === selected)?.address_line1 ?? '';
+  });
 
   readonly form = new FormGroup({
     date: new FormControl(new Date().toISOString().slice(0, 10), Validators.required),
@@ -664,6 +668,11 @@ export class ExpenseFormComponent implements OnInit {
     this.extractionWarnings.set([]);
 
     const file = this.pendingFiles()[0];
+    const selectedPropertyId = this.form.get('property_id')?.value ?? '';
+    const extractionPropertyId =
+      selectedPropertyId && selectedPropertyId !== this.llcPropertyValue
+        ? selectedPropertyId
+        : undefined;
     this.extractingAi.set(true);
 
     this.evidenceService.uploadDraftEvidence(file).subscribe({
@@ -672,7 +681,7 @@ export class ExpenseFormComponent implements OnInit {
           .extractExpense({
             storage_bucket: 'expense-evidence',
             storage_path: draftPath,
-            property_id: this.form.get('property_id')?.value || undefined,
+            property_id: extractionPropertyId,
           })
           .subscribe({
             next: (result) => {
@@ -718,13 +727,15 @@ export class ExpenseFormComponent implements OnInit {
 
   save(): void {
     const value = this.form.getRawValue();
+    const selectedPropertyId =
+      value.property_id && value.property_id !== this.llcPropertyValue ? value.property_id : null;
     const payload: CreateExpensePayload = {
       date: value.date!,
       amount: Number(value.amount),
       description: value.description!,
       irs_category_id: Number(value.irs_category_id),
       subcategory_id: value.subcategory_id!,
-      ...(value.property_id ? { property_id: value.property_id } : {}),
+      ...(selectedPropertyId ? { property_id: selectedPropertyId } : {}),
     };
 
     this.saving.set(true);
