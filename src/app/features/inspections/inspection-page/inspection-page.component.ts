@@ -8,8 +8,9 @@ import {
 } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { InspectionService } from '../../../core/services/inspection.service';
+import { PropertyService } from '../../../core/services/property.service';
 import { RoleService } from '../../../core/role/role.service';
-import { Inspection, InspectionRoom } from '../inspection.types';
+import { Inspection, InspectionRoom, isWithin24h } from '../inspection.types';
 import { InspectionWizardComponent } from '../inspection-wizard/inspection-wizard.component';
 import { InspectionDetailComponent } from '../inspection-detail/inspection-detail.component';
 
@@ -44,7 +45,7 @@ import { InspectionDetailComponent } from '../inspection-detail/inspection-detai
           [inspection]="inspection()!"
           [rooms]="rooms()"
           [propertyId]="propertyId"
-          (ended)="onEnded()"
+          [propertyAddress]="propertyAddress()"
           (back)="goBack()"
         />
       } @else {
@@ -64,12 +65,14 @@ export class InspectionPageComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly inspectionService = inject(InspectionService);
+  private readonly propertyService = inject(PropertyService);
   private readonly roles = inject(RoleService);
 
   readonly loading = signal(true);
   readonly error = signal<string | null>(null);
   readonly inspection = signal<Inspection | null>(null);
   readonly rooms = signal<InspectionRoom[]>([]);
+  readonly propertyAddress = signal('');
 
   get propertyId(): string {
     return this.route.snapshot.paramMap.get('propertyId')!;
@@ -79,16 +82,30 @@ export class InspectionPageComponent implements OnInit {
     return this.route.snapshot.paramMap.get('inspectionId')!;
   }
 
-  readonly showWizard = computed(
-    () => this.inspection()?.status === 'in_progress' && this.canManage(),
-  );
+  readonly showWizard = computed(() => {
+    const insp = this.inspection();
+    return !!insp && isWithin24h(insp.created_at) && this.canManage();
+  });
 
   canManage(): boolean {
     return this.roles.isManagerOrAbove();
   }
 
   ngOnInit(): void {
+    this.loadPropertyAddress();
     this.load();
+  }
+
+  private loadPropertyAddress(): void {
+    this.propertyService.getProperty(this.propertyId).subscribe({
+      next: (property) => {
+        const cityStateZip = [property.city, property.state, property.zip]
+          .filter((p) => !!p)
+          .join(' ');
+        const fullAddress = [property.address_line1, cityStateZip].filter((p) => !!p).join(', ');
+        this.propertyAddress.set(fullAddress || property.address_line1 || '');
+      },
+    });
   }
 
   private load(): void {
@@ -110,10 +127,6 @@ export class InspectionPageComponent implements OnInit {
     this.router.navigate(['/properties', this.propertyId], {
       queryParams: { tab: 'inspections' },
     });
-  }
-
-  onEnded(): void {
-    this.load();
   }
 
   onReopened(): void {

@@ -160,8 +160,6 @@ function describeAuditRow(row: AuditRow): string {
       if (op === 'INSERT') return `${actor} started inspection: ${inTitle}`;
       if (op === 'DELETE') return `${actor} deleted inspection: ${inTitle}`;
       if (op === 'UPDATE') {
-        if (d['status'] === 'completed') return `${actor} completed inspection: ${inTitle}`;
-        if (d['status'] === 'in_progress') return `${actor} reopened inspection: ${inTitle}`;
         if (d['is_active'] === false) return `${actor} deleted inspection: ${inTitle}`;
         return `${actor} updated inspection: ${inTitle}`;
       }

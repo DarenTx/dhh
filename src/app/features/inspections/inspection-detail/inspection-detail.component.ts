@@ -375,16 +375,6 @@ import {
         <div class="meta-grid">
           <span class="meta-label">Type</span>
           <span class="meta-value">{{ typeLabel() }}</span>
-          <span class="meta-label">Status</span>
-          <span class="meta-value">
-            <span
-              class="badge"
-              [class.completed]="inspection().status === 'completed'"
-              [class.in-progress]="inspection().status === 'in_progress'"
-            >
-              {{ inspection().status === 'completed' ? 'Completed' : 'In Progress' }}
-            </span>
-          </span>
           <span class="meta-label">Date</span>
           <span class="meta-value">{{ inspection().created_at | date: 'mediumDate' }}</span>
         </div>
@@ -647,15 +637,6 @@ export class InspectionDetailComponent implements OnInit {
   }
 
   reopenInspection(): void {
-    this.reopening.set(true);
-    this.inspectionService
-      .updateInspection(this.inspection().id, { status: 'in_progress' })
-      .subscribe({
-        next: () => {
-          this.reopening.set(false);
-          this.reopened.emit();
-        },
-        error: () => this.reopening.set(false),
-      });
+    this.reopened.emit();
   }
 }

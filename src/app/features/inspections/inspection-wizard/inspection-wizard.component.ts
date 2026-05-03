@@ -2,14 +2,15 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  effect,
   inject,
   input,
-  OnInit,
   output,
   signal,
 } from '@angular/core';
+import { forkJoin } from 'rxjs';
 import { NgIconComponent } from '@ng-icons/core';
-import { InspectionService } from '../../../core/services/inspection.service';
+import { InspectionPhotoService } from '../../../core/services/inspection-photo.service';
 import { Inspection, InspectionRoom, INSPECTION_TYPE_LABELS } from '../inspection.types';
 import { PhotoCaptureComponent } from './photo-capture/photo-capture.component';
 
@@ -75,21 +76,21 @@ import { PhotoCaptureComponent } from './photo-capture/photo-capture.component';
       }
     }
 
-    .end-btn {
+    .close-btn {
       display: flex;
       align-items: center;
       gap: 0.25rem;
       padding: 0.375rem 0.875rem;
-      background: #276749;
-      color: #fff;
-      border: none;
+      background: #fff;
+      color: #4a5568;
+      border: 1px solid #cbd5e0;
       border-radius: 0.375rem;
       font-size: 0.875rem;
       font-weight: 600;
       cursor: pointer;
       flex-shrink: 0;
       &:hover {
-        opacity: 0.9;
+        background: #f7fafc;
       }
     }
 
@@ -173,104 +174,6 @@ import { PhotoCaptureComponent } from './photo-capture/photo-capture.component';
       font-size: 0.8125rem;
       color: #a0aec0;
     }
-
-    /* Footer nav */
-    .footer-nav {
-      display: flex;
-      justify-content: space-between;
-      padding: 0.75rem 1rem;
-      background: #fff;
-      border-top: 1px solid #e2e8f0;
-      flex-shrink: 0;
-    }
-
-    .nav-btn {
-      display: flex;
-      align-items: center;
-      gap: 0.375rem;
-      padding: 0.5rem 1.25rem;
-      border: 1px solid #cbd5e0;
-      border-radius: 0.5rem;
-      background: #fff;
-      font-size: 0.9375rem;
-      font-weight: 600;
-      color: #4a5568;
-      cursor: pointer;
-      &:disabled {
-        opacity: 0.4;
-        cursor: not-allowed;
-      }
-    }
-
-    .nav-btn.next {
-      background: #2b6cb0;
-      color: #fff;
-      border-color: #2b6cb0;
-    }
-
-    /* End confirmation modal */
-    .modal-backdrop {
-      position: fixed;
-      inset: 0;
-      background: rgba(0, 0, 0, 0.45);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 400;
-      padding: 1rem;
-    }
-
-    .modal {
-      background: #fff;
-      border-radius: 0.875rem;
-      padding: 1.75rem;
-      width: 100%;
-      max-width: 26rem;
-    }
-
-    .modal h2 {
-      margin: 0 0 0.75rem;
-      font-size: 1.125rem;
-      font-weight: 700;
-      color: #2d3748;
-    }
-    .modal p {
-      margin: 0 0 1.25rem;
-      font-size: 0.9375rem;
-      color: #4a5568;
-    }
-
-    .modal-actions {
-      display: flex;
-      gap: 0.625rem;
-      justify-content: flex-end;
-    }
-
-    .btn-ghost {
-      padding: 0.5rem 1rem;
-      background: transparent;
-      color: #4a5568;
-      border: 1px solid #cbd5e0;
-      border-radius: 0.375rem;
-      font-size: 0.9375rem;
-      font-weight: 600;
-      cursor: pointer;
-    }
-
-    .btn-confirm {
-      padding: 0.5rem 1.25rem;
-      background: #276749;
-      color: #fff;
-      border: none;
-      border-radius: 0.375rem;
-      font-size: 0.9375rem;
-      font-weight: 600;
-      cursor: pointer;
-      &:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
-      }
-    }
   `,
   template: `
     <div class="top-bar">
@@ -278,12 +181,12 @@ import { PhotoCaptureComponent } from './photo-capture/photo-capture.component';
         <ng-icon name="heroChevronLeft" size="22" />
       </button>
       <div class="top-bar-title">
-        <h1>{{ inspection().title }}</h1>
-        <p>{{ typeLabel() }} · In Progress</p>
+        <h1>{{ propertyAddress() || inspection().title }}</h1>
+        <p>{{ inspection().title }} · {{ typeLabel() }}</p>
       </div>
-      <button class="end-btn" (click)="confirmEndModal.set(true)">
-        <ng-icon name="heroCheckCircle" size="16" />
-        End
+      <button class="close-btn" (click)="back.emit()">
+        <ng-icon name="heroXMark" size="16" />
+        Close
       </button>
     </div>
 
@@ -295,7 +198,7 @@ import { PhotoCaptureComponent } from './photo-capture/photo-capture.component';
           (click)="activeRoomIndex.set(i)"
         >
           {{ room.display_name }}
-          @if (roomPhotoCounts()[room.id]) {
+          @if ((roomPhotoCounts()[room.id] ?? 0) > 0) {
             <span class="chip-badge">{{ roomPhotoCounts()[room.id] }}</span>
           }
         </button>
@@ -320,60 +223,30 @@ import { PhotoCaptureComponent } from './photo-capture/photo-capture.component';
         />
       }
     </div>
-
-    <div class="footer-nav">
-      <button
-        class="nav-btn"
-        [disabled]="activeRoomIndex() === 0"
-        (click)="activeRoomIndex.update((i) => i - 1)"
-      >
-        <ng-icon name="heroChevronLeft" size="16" />
-        Prev
-      </button>
-      <button
-        class="nav-btn next"
-        [disabled]="activeRoomIndex() === rooms().length - 1"
-        (click)="activeRoomIndex.update((i) => i + 1)"
-      >
-        Next
-        <ng-icon name="heroChevronRight" size="16" />
-      </button>
-    </div>
-
-    @if (confirmEndModal()) {
-      <div class="modal-backdrop" (click)="confirmEndModal.set(false)">
-        <div class="modal" (click)="$event.stopPropagation()">
-          <h2>End Inspection?</h2>
-          <p>
-            This will mark the inspection as completed. You can still view it afterwards, and action
-            items can always be resolved.
-          </p>
-          <div class="modal-actions">
-            <button class="btn-ghost" (click)="confirmEndModal.set(false)">Cancel</button>
-            <button class="btn-confirm" [disabled]="ending()" (click)="endInspection()">
-              {{ ending() ? 'Ending…' : 'End Inspection' }}
-            </button>
-          </div>
-        </div>
-      </div>
-    }
   `,
 })
 export class InspectionWizardComponent {
   readonly inspection = input.required<Inspection>();
   readonly rooms = input.required<InspectionRoom[]>();
   readonly propertyId = input.required<string>();
+  readonly propertyAddress = input<string>('');
 
-  readonly ended = output<void>();
   readonly back = output<void>();
 
-  private readonly inspectionService = inject(InspectionService);
+  private readonly photoService = inject(InspectionPhotoService);
 
   readonly activeRoomIndex = signal(0);
   readonly coverPhotoId = signal<string | null>(null);
-  readonly confirmEndModal = signal(false);
-  readonly ending = signal(false);
-  readonly roomPhotoCounts = signal<Record<string, number>>({});
+  readonly roomPhotoCounts = signal<Partial<Record<string, number>>>({});
+
+  private readonly _loadPhotoCountsEffect = effect(() => {
+    const rooms = this.rooms();
+    if (rooms.length === 0) {
+      this.roomPhotoCounts.set({});
+      return;
+    }
+    this.loadRoomPhotoCounts(rooms);
+  });
 
   readonly activeRoom = computed(() => this.rooms()[this.activeRoomIndex()] ?? null);
   readonly typeLabel = computed(
@@ -389,17 +262,22 @@ export class InspectionWizardComponent {
     }));
   }
 
-  endInspection(): void {
-    this.ending.set(true);
-    this.inspectionService.endInspection(this.inspection().id).subscribe({
-      next: () => {
-        this.ending.set(false);
-        this.confirmEndModal.set(false);
-        this.ended.emit();
+  private loadRoomPhotoCounts(rooms: InspectionRoom[]): void {
+    const requests = rooms.map((room) => this.photoService.getPhotosForRoom(room.id));
+    forkJoin(requests).subscribe({
+      next: (photoGroups) => {
+        const counts: Record<string, number> = {};
+        for (let i = 0; i < rooms.length; i++) {
+          counts[rooms[i].id] = photoGroups[i]?.length ?? 0;
+        }
+        this.roomPhotoCounts.set(counts);
       },
       error: () => {
-        this.ending.set(false);
-        this.confirmEndModal.set(false);
+        const counts: Record<string, number> = {};
+        for (const room of rooms) {
+          counts[room.id] = this.roomPhotoCounts()[room.id] ?? 0;
+        }
+        this.roomPhotoCounts.set(counts);
       },
     });
   }

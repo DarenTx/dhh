@@ -146,7 +146,7 @@ export class InspectionService {
 
   updateInspection(
     id: string,
-    patch: Partial<Pick<Inspection, 'title' | 'inspection_type' | 'cover_photo_id' | 'status'>>,
+    patch: Partial<Pick<Inspection, 'title' | 'inspection_type' | 'cover_photo_id'>>,
   ): Observable<Inspection> {
     return from(
       this.supabase
@@ -163,15 +163,7 @@ export class InspectionService {
   }
 
   endInspection(id: string): Observable<void> {
-    return from(
-      this.supabase
-        .from('inspections')
-        .update({ status: 'completed' })
-        .eq('id', id)
-        .then(({ error }) => {
-          if (error) throw error;
-        }),
-    );
+    return from(Promise.resolve());
   }
 
   setCoverPhoto(inspectionId: string, photoId: string): Observable<void> {

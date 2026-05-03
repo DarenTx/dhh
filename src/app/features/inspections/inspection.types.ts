@@ -1,5 +1,4 @@
 export type InspectionType = 'move_in' | 'move_out' | 'other';
-export type InspectionStatus = 'in_progress' | 'completed';
 
 export const INSPECTION_TYPE_LABELS: Record<InspectionType, string> = {
   move_in: 'Move-In',
@@ -13,7 +12,6 @@ export interface Inspection {
   lease_id: string | null;
   title: string;
   inspection_type: InspectionType;
-  status: InspectionStatus;
   cover_photo_id: string | null;
   is_active: boolean;
   deleted_at: string | null;

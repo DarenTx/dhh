@@ -14,7 +14,12 @@ import { NgIconComponent } from '@ng-icons/core';
 import { InspectionService } from '../../../core/services/inspection.service';
 import { RoleService } from '../../../core/role/role.service';
 import { Lease } from '../../../core/services/lease.service';
-import { INSPECTION_TYPE_LABELS, InspectionType, InspectionWithRollup } from '../inspection.types';
+import {
+  INSPECTION_TYPE_LABELS,
+  InspectionType,
+  InspectionWithRollup,
+  isWithin24h,
+} from '../inspection.types';
 
 @Component({
   selector: 'app-inspections-tab',
@@ -269,10 +274,10 @@ import { INSPECTION_TYPE_LABELS, InspectionType, InspectionWithRollup } from '..
               <p class="card-title">{{ insp.title }}</p>
               <span
                 class="badge"
-                [class.in-progress]="insp.status === 'in_progress'"
-                [class.completed]="insp.status === 'completed'"
+                [class.in-progress]="isActive(insp)"
+                [class.completed]="!isActive(insp)"
               >
-                {{ insp.status === 'in_progress' ? 'In Progress' : 'Completed' }}
+                {{ isActive(insp) ? 'Active' : 'Completed' }}
               </span>
             </div>
             <div class="card-meta">
@@ -382,7 +387,7 @@ export class InspectionsTabComponent implements OnInit {
   ];
 
   readonly activeInspection = computed(
-    () => this.inspections().find((i) => i.status === 'in_progress') ?? null,
+    () => this.inspections().find((i) => isWithin24h(i.created_at)) ?? null,
   );
 
   readonly activeLeases = computed(() => this.leases().filter((l) => l.status === 'active'));
@@ -393,6 +398,10 @@ export class InspectionsTabComponent implements OnInit {
 
   typeLabel(type: string): string {
     return INSPECTION_TYPE_LABELS[type as InspectionType] ?? type;
+  }
+
+  isActive(insp: InspectionWithRollup): boolean {
+    return isWithin24h(insp.created_at);
   }
 
   ngOnInit(): void {
@@ -456,7 +465,7 @@ export class InspectionsTabComponent implements OnInit {
           const msg: string = err?.message ?? '';
           if (msg.includes('uq_one_active_inspection')) {
             this.startError.set(
-              'There is already an in-progress inspection for this property. Please complete it before starting a new one.',
+              'There is already an active inspection for this property. Please wait 24 hours or save it before starting a new one.',
             );
           } else {
             this.startError.set(msg || 'Failed to start inspection.');

@@ -1,12 +1,13 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  effect,
   inject,
   input,
-  OnInit,
   output,
   signal,
   computed,
+  untracked,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { toSignal } from '@angular/core/rxjs-interop';
@@ -284,7 +285,7 @@ import { InspectionPhoto, InspectionTag, isWithin24h } from '../../inspection.ty
     }
   `,
 })
-export class PhotoCaptureComponent implements OnInit {
+export class PhotoCaptureComponent {
   readonly propertyId = input.required<string>();
   readonly inspectionId = input.required<string>();
   readonly roomId = input.required<string>();
@@ -312,10 +313,15 @@ export class PhotoCaptureComponent implements OnInit {
 
   private readonly descriptionTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
-  ngOnInit(): void {
-    this.loadPhotos();
-    this.loadTags();
-  }
+  private readonly _roomEffect = effect(() => {
+    this.roomId(); // track
+    this.roomType(); // track
+    this.photos.set([]);
+    untracked(() => {
+      this.loadPhotos();
+      this.loadTags();
+    });
+  });
 
   private loadPhotos(): void {
     this.loading.set(true);
@@ -326,12 +332,15 @@ export class PhotoCaptureComponent implements OnInit {
           this.photos.set([]);
           return;
         }
-        const paths = photos.map((p) => p.storage_path);
+        const sorted = [...photos].sort(
+          (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+        );
+        const paths = sorted.map((p) => p.storage_path);
         this.photoService.getSignedUrls(paths).subscribe({
           next: (urls) => {
-            this.photos.set(photos.map((p, i) => ({ ...p, signedUrl: urls[i] })));
+            this.photos.set(sorted.map((p, i) => ({ ...p, signedUrl: urls[i] })));
           },
-          error: () => this.photos.set(photos),
+          error: () => this.photos.set(sorted),
         });
       },
       error: () => this.loading.set(false),
@@ -371,11 +380,11 @@ export class PhotoCaptureComponent implements OnInit {
                 this.uploading.set(false);
                 this.photoService.getSignedUrl(storagePath).subscribe({
                   next: (url) => {
-                    this.photos.update((prev) => [...prev, { ...photo, signedUrl: url }]);
+                    this.photos.update((prev) => [{ ...photo, signedUrl: url }, ...prev]);
                     this.photoAdded.emit();
                   },
                   error: () => {
-                    this.photos.update((prev) => [...prev, photo]);
+                    this.photos.update((prev) => [photo, ...prev]);
                     this.photoAdded.emit();
                   },
                 });

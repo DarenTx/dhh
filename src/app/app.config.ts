@@ -31,6 +31,8 @@ import {
   heroPencil,
   heroTrash,
   heroCheck,
+  heroStar,
+  heroFlag,
 } from '@ng-icons/heroicons/outline';
 
 import { routes } from './app.routes';
@@ -72,6 +74,8 @@ export const appConfig: ApplicationConfig = {
       heroPencil,
       heroTrash,
       heroCheck,
+      heroStar,
+      heroFlag,
     }),
     provideServiceWorker('ngsw-worker.js', {
       enabled: !isDevMode(),
