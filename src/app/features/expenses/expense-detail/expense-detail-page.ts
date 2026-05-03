@@ -261,6 +261,19 @@ import { PropertyService } from '../../../core/services/property.service';
         background: #fff5f5;
       }
     }
+    .btn-hard-delete {
+      padding: 0.5rem 1rem;
+      background: #c53030;
+      color: #fff;
+      border: none;
+      border-radius: 0.375rem;
+      font-size: 0.875rem;
+      font-weight: 600;
+      cursor: pointer;
+      &:hover {
+        background: #9b2c2c;
+      }
+    }
 
     .modal-backdrop {
       position: fixed;
@@ -483,10 +496,17 @@ import { PropertyService } from '../../../core/services/property.service';
             <span class="dv">{{ expense()!.properties?.address_line1 ?? 'LLC-wide' }}</span>
           </div>
 
-          @if (canEditOrDelete()) {
+          @if (canEditOrDelete() || isAdmin()) {
             <div class="action-row">
-              <button class="btn-edit" (click)="openEdit()">Edit</button>
-              <button class="btn-delete" (click)="showDeleteConfirm.set(true)">Delete</button>
+              @if (canEditOrDelete()) {
+                <button class="btn-edit" (click)="openEdit()">Edit</button>
+                <button class="btn-delete" (click)="showDeleteConfirm.set(true)">Delete</button>
+              }
+              @if (isAdmin()) {
+                <button class="btn-hard-delete" (click)="showHardDeleteConfirm.set(true)">
+                  Hard Delete
+                </button>
+              }
             </div>
           }
         </div>
@@ -728,6 +748,40 @@ import { PropertyService } from '../../../core/services/property.service';
       </div>
     }
 
+    @if (showHardDeleteConfirm()) {
+      <div class="modal-backdrop" (click)="showHardDeleteConfirm.set(false)">
+        <div class="modal" (click)="$event.stopPropagation()">
+          <h3>Permanently Delete Expense?</h3>
+          <p class="confirm-body">
+            This will <strong>permanently delete</strong> the expense of
+            <strong>\${{ expense()!.amount.toFixed(2) }}</strong> logged on {{ expense()!.date }},
+            along with all associated evidence files. This action cannot be undone.
+          </p>
+          @if (hardDeleteError()) {
+            <p class="server-error">{{ hardDeleteError() }}</p>
+          }
+          <div class="btn-row">
+            <button
+              type="button"
+              class="btn-secondary"
+              (click)="showHardDeleteConfirm.set(false)"
+              [disabled]="hardDeleting()"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              class="btn-danger"
+              (click)="confirmHardDelete()"
+              [disabled]="hardDeleting()"
+            >
+              {{ hardDeleting() ? 'Deleting…' : 'Permanently Delete' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    }
+
     @if (rejectDialogOpen()) {
       <div class="reject-modal-backdrop" (click)="closeReject()">
         <div class="reject-modal" (click)="$event.stopPropagation()">
@@ -820,6 +874,9 @@ export class ExpenseDetailPage implements OnInit {
 
   // Delete state
   readonly showDeleteConfirm = signal(false);
+  readonly showHardDeleteConfirm = signal(false);
+  readonly hardDeleting = signal(false);
+  readonly hardDeleteError = signal<string | null>(null);
 
   readonly rejectDialogOpen = signal(false);
   readonly rejectReason = signal('');
@@ -828,6 +885,10 @@ export class ExpenseDetailPage implements OnInit {
 
   canManage(): boolean {
     return this.roles.isManagerOrAbove();
+  }
+
+  isAdmin(): boolean {
+    return this.roles.isAdmin();
   }
 
   ngOnInit(): void {
@@ -936,6 +997,23 @@ export class ExpenseDetailPage implements OnInit {
     if (!expense) return;
     this.expenseService.retractExpense(expense.id).subscribe(() => {
       this.router.navigate(['/expenses']);
+    });
+  }
+
+  confirmHardDelete(): void {
+    const expense = this.expense();
+    if (!expense) return;
+    this.hardDeleting.set(true);
+    this.hardDeleteError.set(null);
+    this.expenseService.hardDeleteExpense(expense.id).subscribe({
+      next: () => {
+        this.hardDeleting.set(false);
+        this.router.navigate(['/expenses']);
+      },
+      error: (err) => {
+        this.hardDeleting.set(false);
+        this.hardDeleteError.set(err?.message ?? 'Failed to delete expense.');
+      },
     });
   }
 

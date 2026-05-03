@@ -1,6 +1,7 @@
 import { inject, Injectable } from '@angular/core';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { from, Observable } from 'rxjs';
+import { switchMap } from 'rxjs/operators';
 import { SUPABASE_CLIENT } from '../auth/supabase.provider';
 
 export interface Expense {
@@ -136,6 +137,46 @@ export class ExpenseService {
         .then(({ error }) => {
           if (error) throw error;
         }),
+    );
+  }
+
+  hardDeleteExpense(id: string): Observable<void> {
+    return from(
+      this.supabase
+        .from('expense_evidence')
+        .select('storage_path')
+        .eq('expense_id', id)
+        .then(({ data, error }) => {
+          if (error) throw error;
+          return (data ?? []).map((r: { storage_path: string }) => r.storage_path);
+        }),
+    ).pipe(
+      switchMap((paths) => {
+        const storageDel =
+          paths.length > 0
+            ? from(
+                this.supabase.storage
+                  .from('expense-evidence')
+                  .remove(paths)
+                  .then(({ error }) => {
+                    if (error) throw error;
+                  }),
+              )
+            : from(Promise.resolve());
+        return storageDel.pipe(
+          switchMap(() =>
+            from(
+              this.supabase
+                .from('expenses')
+                .delete()
+                .eq('id', id)
+                .then(({ error }) => {
+                  if (error) throw error;
+                }),
+            ),
+          ),
+        );
+      }),
     );
   }
 

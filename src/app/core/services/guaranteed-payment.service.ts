@@ -57,7 +57,7 @@ export class GuaranteedPaymentService {
     return from(
       this.supabase
         .from('guaranteed_payments')
-        .select('*, user_roles!guaranteed_payments_created_by_fkey(email)')
+        .select('*')
         .eq('is_active', true)
         .gte('work_date', start)
         .lte('work_date', end)
@@ -120,6 +120,18 @@ export class GuaranteedPaymentService {
       this.supabase
         .from('guaranteed_payments')
         .update({ is_active: false })
+        .eq('id', id)
+        .then(({ error }) => {
+          if (error) throw error;
+        }),
+    );
+  }
+
+  hardDeletePayment(id: string): Observable<void> {
+    return from(
+      this.supabase
+        .from('guaranteed_payments')
+        .delete()
         .eq('id', id)
         .then(({ error }) => {
           if (error) throw error;

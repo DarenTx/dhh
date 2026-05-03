@@ -135,6 +135,19 @@ import { AuthenticationService } from '../../../core/auth/authentication.service
         background: #fff5f5;
       }
     }
+    .btn-hard-delete {
+      padding: 0.5rem 1rem;
+      background: #c53030;
+      color: #fff;
+      border: none;
+      border-radius: 0.375rem;
+      font-size: 0.875rem;
+      font-weight: 600;
+      cursor: pointer;
+      &:hover {
+        background: #9b2c2c;
+      }
+    }
 
     .approval-row {
       display: flex;
@@ -416,10 +429,17 @@ import { AuthenticationService } from '../../../core/auth/authentication.service
             <span class="dv">{{ payment()!.work_date }}</span>
           </div>
 
-          @if (canEditOrDelete()) {
+          @if (canEditOrDelete() || isAdmin()) {
             <div class="action-row">
-              <button class="btn-edit" (click)="openEdit()">Edit</button>
-              <button class="btn-delete" (click)="showDeleteConfirm.set(true)">Delete</button>
+              @if (canEditOrDelete()) {
+                <button class="btn-edit" (click)="openEdit()">Edit</button>
+                <button class="btn-delete" (click)="showDeleteConfirm.set(true)">Delete</button>
+              }
+              @if (isAdmin()) {
+                <button class="btn-hard-delete" (click)="showHardDeleteConfirm.set(true)">
+                  Hard Delete
+                </button>
+              }
             </div>
           }
         </div>
@@ -574,6 +594,40 @@ import { AuthenticationService } from '../../../core/auth/authentication.service
       </div>
     }
 
+    @if (showHardDeleteConfirm()) {
+      <div class="modal-backdrop" (click)="showHardDeleteConfirm.set(false)">
+        <div class="modal" (click)="$event.stopPropagation()">
+          <h3>Permanently Delete Entry?</h3>
+          <p class="confirm-body">
+            This will <strong>permanently delete</strong> the entry for
+            <strong>{{ payment()!.hours_billed }} hrs</strong> on {{ payment()!.work_date }}. This
+            action cannot be undone.
+          </p>
+          @if (hardDeleteError()) {
+            <p class="server-error">{{ hardDeleteError() }}</p>
+          }
+          <div class="btn-row">
+            <button
+              type="button"
+              class="btn-secondary"
+              (click)="showHardDeleteConfirm.set(false)"
+              [disabled]="hardDeleting()"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              class="btn-danger"
+              (click)="confirmHardDelete()"
+              [disabled]="hardDeleting()"
+            >
+              {{ hardDeleting() ? 'Deleting…' : 'Permanently Delete' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    }
+
     @if (rejectDialogOpen()) {
       <div class="reject-modal-backdrop" (click)="closeReject()">
         <div class="reject-modal" (click)="$event.stopPropagation()">
@@ -645,6 +699,9 @@ export class GuaranteedPaymentDetailPage implements OnInit {
 
   // Delete state
   readonly showDeleteConfirm = signal(false);
+  readonly showHardDeleteConfirm = signal(false);
+  readonly hardDeleting = signal(false);
+  readonly hardDeleteError = signal<string | null>(null);
 
   readonly rejectDialogOpen = signal(false);
   readonly rejectReason = signal('');
@@ -653,6 +710,10 @@ export class GuaranteedPaymentDetailPage implements OnInit {
 
   canManage(): boolean {
     return this.roles.isManagerOrAbove();
+  }
+
+  isAdmin(): boolean {
+    return this.roles.isAdmin();
   }
 
   ngOnInit(): void {
@@ -722,6 +783,23 @@ export class GuaranteedPaymentDetailPage implements OnInit {
     if (!gp) return;
     this.gpService.retractPayment(gp.id).subscribe(() => {
       this.router.navigate(['/guaranteed-payments']);
+    });
+  }
+
+  confirmHardDelete(): void {
+    const gp = this.payment();
+    if (!gp) return;
+    this.hardDeleting.set(true);
+    this.hardDeleteError.set(null);
+    this.gpService.hardDeletePayment(gp.id).subscribe({
+      next: () => {
+        this.hardDeleting.set(false);
+        this.router.navigate(['/guaranteed-payments']);
+      },
+      error: (err) => {
+        this.hardDeleting.set(false);
+        this.hardDeleteError.set(err?.message ?? 'Failed to delete entry.');
+      },
     });
   }
 
