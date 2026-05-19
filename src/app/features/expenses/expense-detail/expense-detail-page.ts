@@ -173,13 +173,31 @@ import { PropertyService } from '../../../core/services/property.service';
     .approval-row:last-child {
       border-bottom: none;
     }
-    .approver-name {
+    .approver-info {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+    .approver-top {
       display: flex;
       align-items: center;
       flex-wrap: wrap;
       gap: 0.375rem;
       font-size: 0.9375rem;
       color: #2d3748;
+    }
+    .approval-reason {
+      font-size: 0.8125rem;
+      color: #4a5568;
+      margin: 0;
+      padding-left: 2.625rem;
+      font-style: italic;
+    }
+    .auto-approval-info {
+      display: flex;
+      flex-direction: column;
+      gap: 0.375rem;
+      align-items: flex-start;
     }
     .approver-cell {
       display: flex;
@@ -482,6 +500,8 @@ import { PropertyService } from '../../../core/services/property.service';
         <div class="card">
           <p class="card-title">Details</p>
           <div class="detail-grid">
+            <span class="dl">Amount</span>
+            <span class="dv">${{ expense()!.amount.toFixed(2) }}</span>
             <span class="dl">Status</span>
             <span>
               <span class="status-badge status-{{ expense()!.status }}">
@@ -547,42 +567,44 @@ import { PropertyService } from '../../../core/services/property.service';
             <p class="card-title">Approval Status</p>
             @for (req of allApprovals(); track req.id) {
               <div class="approval-row">
-                <span class="approver-name">
-                  <span class="approver-cell">
-                    @if (req.approver_avatar_url) {
-                      <img
-                        class="approver-avatar"
-                        [src]="req.approver_avatar_url"
-                        [alt]="req.approver_email ?? ''"
-                      />
-                    } @else {
-                      <span class="approver-avatar-placeholder">
-                        {{
-                          (
-                            req.approver_first_name?.[0] ??
-                            req.approver_email?.[0] ??
-                            '?'
-                          ).toUpperCase()
-                        }}
-                      </span>
-                    }
-                    <span>
-                      @if (req.approver_first_name || req.approver_last_name) {
-                        {{ req.approver_first_name }} {{ req.approver_last_name }}
+                <div class="approver-info">
+                  <div class="approver-top">
+                    <span class="approver-cell">
+                      @if (req.approver_avatar_url) {
+                        <img
+                          class="approver-avatar"
+                          [src]="req.approver_avatar_url"
+                          [alt]="req.approver_email ?? ''"
+                        />
                       } @else {
-                        {{ req.approver_email ?? 'Unknown' }}
+                        <span class="approver-avatar-placeholder">
+                          {{
+                            (
+                              req.approver_first_name?.[0] ??
+                              req.approver_email?.[0] ??
+                              '?'
+                            ).toUpperCase()
+                          }}
+                        </span>
                       }
+                      <span>
+                        @if (req.approver_first_name || req.approver_last_name) {
+                          {{ req.approver_first_name }} {{ req.approver_last_name }}
+                        } @else {
+                          {{ req.approver_email ?? 'Unknown' }}
+                        }
+                      </span>
                     </span>
-                  </span>
-                  <span class="status-badge status-{{ req.status }}">
-                    {{ req.status | titlecase }}
-                  </span>
+                    <span class="status-badge status-{{ req.status }}">
+                      {{ req.status | titlecase }}
+                    </span>
+                  </div>
                   @if (req.reason) {
-                    <span style="color:#718096;font-size:0.8125rem;margin-left:0.5rem"
-                      >&mdash; {{ req.reason }}</span
-                    >
+                    <p class="approval-reason">{{ req.reason }}</p>
+                  } @else if (req.status === 'approved') {
+                    <p class="approval-reason">Manager approved</p>
                   }
-                </span>
+                </div>
                 @if (req.approver_id === currentUserId() && req.status === 'pending') {
                   <div class="approval-actions">
                     <button class="btn-approve" (click)="approveReq(req.id)">Approve</button>
@@ -591,6 +613,18 @@ import { PropertyService } from '../../../core/services/property.service';
                 }
               </div>
             }
+          </div>
+        } @else if (expense()!.status === 'approved') {
+          <div class="card">
+            <p class="card-title">Approval Status</p>
+            <div class="auto-approval-info">
+              <span class="status-badge status-approved">Auto-approved</span>
+              @if (threshold() !== null) {
+                <p class="approval-reason" style="padding-left:0">
+                  Under the ${{ threshold() }} monthly aggregate threshold
+                </p>
+              }
+            </div>
           </div>
         }
       }
@@ -834,6 +868,7 @@ export class ExpenseDetailPage implements OnInit {
   }
 
   readonly allApprovals = signal<ApprovalRequirement[]>([]);
+  readonly threshold = signal<number | null>(null);
 
   readonly canEditOrDelete = computed(() => {
     const expense = this.expense();
@@ -895,6 +930,9 @@ export class ExpenseDetailPage implements OnInit {
     this.title.setTitle('Expense â€“ DHH');
     const id = this.route.snapshot.paramMap.get('id')!;
     this.load(id);
+    this.settingsService.getSettings().subscribe((s) =>
+      this.threshold.set(s.expense_monthly_aggregate_threshold),
+    );
   }
 
   private load(id: string): void {
