@@ -9,6 +9,9 @@ import {
 import { Router } from '@angular/router';
 import { Title } from '@angular/platform-browser';
 import { NgIconComponent } from '@ng-icons/core';
+import { from } from 'rxjs';
+import { SupabaseClient } from '@supabase/supabase-js';
+import { SUPABASE_CLIENT } from '../../core/auth/supabase.provider';
 import {
   GuaranteedPaymentService,
   GuaranteedPayment,
@@ -16,10 +19,13 @@ import {
 import { GuaranteedPaymentFormComponent } from './guaranteed-payment-form/guaranteed-payment-form.component';
 import { RoleService } from '../../core/role/role.service';
 
-type ViewMode = 'mine' | 'all';
-
-interface GroupedEntry extends GuaranteedPayment {
-  creatorEmail?: string;
+interface MonthGroup {
+  year: number;
+  month: number;
+  label: string;
+  entries: GuaranteedPayment[];
+  totalHours: number;
+  open: boolean;
 }
 
 @Component({
@@ -28,69 +34,185 @@ interface GroupedEntry extends GuaranteedPayment {
   imports: [NgIconComponent, GuaranteedPaymentFormComponent],
   styles: `
     .page-header {
-      display: flex; align-items: center; justify-content: space-between;
-      flex-wrap: wrap; gap: 0.75rem; padding: 1.5rem 1.5rem 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      padding: 1.5rem 1.5rem 0;
     }
-    h1 { margin: 0; font-size: 1.5rem; font-weight: 700; color: #2d3748; }
-
-    .controls { display: flex; align-items: center; gap: 0.75rem; padding: 1rem 1.5rem 0; flex-wrap: wrap; }
-    .toggle-group { display: flex; border: 1px solid #e2e8f0; border-radius: 0.5rem; overflow: hidden; }
-    .toggle-btn {
-      padding: 0.4375rem 1rem; background: #fff; border: none; cursor: pointer;
-      font-size: 0.875rem; font-weight: 500; color: #4a5568;
-      &.active { background: #ebf4ff; color: #2b6cb0; }
+    h1 {
+      margin: 0;
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: #2d3748;
     }
 
-    .nav-row { display: flex; align-items: center; gap: 0.75rem; }
-    .nav-btn {
-      background: none; border: none; cursor: pointer; color: #4a5568;
-      display: flex; align-items: center; padding: 0.25rem;
-      &:disabled { opacity: 0.4; cursor: not-allowed; }
+    .accordion {
+      padding: 1rem 1.5rem 4rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
     }
-    .month-label { font-size: 1rem; font-weight: 600; color: #2d3748; min-width: 8rem; text-align: center; }
+    .month-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #f7fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 0.625rem;
+      padding: 0.875rem 1rem;
+      cursor: pointer;
+      user-select: none;
+    }
+    .month-header.open {
+      border-bottom-left-radius: 0;
+      border-bottom-right-radius: 0;
+      border-bottom-color: #edf2f7;
+    }
+    .month-info {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .month-name {
+      font-weight: 600;
+      color: #2d3748;
+      font-size: 0.9375rem;
+    }
+    .month-count {
+      font-size: 0.8125rem;
+      color: #718096;
+    }
+    .month-total {
+      font-weight: 600;
+      color: #2d3748;
+      font-size: 0.9375rem;
+    }
 
-    .list { padding: 1rem 1.5rem 4rem; display: flex; flex-direction: column; gap: 0.5rem; }
+    .gp-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      padding-top: 0.75rem;
+    }
     .gp-row {
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 0.875rem 1rem; background: #fff; border: 1px solid #e2e8f0;
-      border-radius: 0.5rem; cursor: pointer; transition: background 0.12s;
-      &:hover { background: #f7fafc; }
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 0.5rem;
+      padding: 1rem;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      cursor: pointer;
+      transition:
+        border-color 0.12s,
+        box-shadow 0.12s;
+      gap: 1rem;
+      &:hover {
+        border-color: #bee3f8;
+        box-shadow: 0 1px 4px rgb(0 0 0 / 0.06);
+      }
     }
-    .gp-left { display: flex; flex-direction: column; gap: 0.125rem; }
-    .gp-date { font-size: 0.9375rem; color: #2d3748; font-weight: 500; }
-    .gp-desc { font-size: 0.8125rem; color: #718096; }
-    .gp-right { display: flex; align-items: center; gap: 0.75rem; }
-    .gp-hours { font-size: 0.9375rem; font-weight: 600; color: #2d3748; }
+    .gp-left {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+    .gp-date {
+      font-size: 0.8125rem;
+      color: #718096;
+    }
+    .gp-desc {
+      font-size: 1rem;
+      color: #2d3748;
+      font-weight: 600;
+    }
+    .gp-sub {
+      font-size: 0.875rem;
+      color: #718096;
+    }
+    .gp-right {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      flex-shrink: 0;
+    }
+    .gp-hours {
+      font-size: 0.9375rem;
+      font-weight: 600;
+      color: #2d3748;
+    }
     .status-badge {
-      display: inline-flex; align-items: center;
-      padding: 0.125rem 0.5rem; border-radius: 9999px;
-      font-size: 0.75rem; font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      padding: 0.125rem 0.5rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
     }
-    .status-pending { background: #fef3c7; color: #92400e; }
-    .status-approved { background: #d1fae5; color: #065f46; }
-    .status-rejected { background: #fee2e2; color: #991b1b; }
+    .status-pending {
+      background: #fef3c7;
+      color: #92400e;
+    }
+    .status-approved {
+      background: #d1fae5;
+      color: #065f46;
+    }
+    .status-rejected {
+      background: #fee2e2;
+      color: #991b1b;
+    }
 
-    .monthly-total {
-      padding: 0.625rem 0; border-top: 1px solid #e2e8f0; margin-top: 0.25rem;
-      font-size: 0.875rem; color: #718096; text-align: right;
+    .empty-state {
+      padding: 3rem 1.5rem;
+      text-align: center;
+      color: #a0aec0;
     }
-    .empty-state { padding: 3rem 1.5rem; text-align: center; color: #a0aec0; }
-    .loading { padding: 2rem 1.5rem; color: #718096; }
+    .loading {
+      padding: 2rem 1.5rem;
+      color: #718096;
+    }
 
     .btn-add {
-      display: flex; align-items: center; gap: 0.375rem;
-      padding: 0.5rem 1rem; background: #2b6cb0; color: #fff; border: none;
-      border-radius: 0.375rem; font-size: 0.9375rem; font-weight: 500; cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.375rem;
+      padding: 0.5rem 1rem;
+      background: #2b6cb0;
+      color: #fff;
+      border: none;
+      border-radius: 0.375rem;
+      font-size: 0.9375rem;
+      font-weight: 500;
+      cursor: pointer;
     }
+
     .modal-backdrop {
-      position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 100;
-      display: flex; align-items: center; justify-content: center; padding: 1rem;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.4);
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
     }
     .modal {
-      background: #fff; border-radius: 0.75rem; padding: 1.5rem;
-      width: 100%; max-width: 520px; max-height: 90vh; overflow-y: auto;
+      background: #fff;
+      border-radius: 0.75rem;
+      padding: 1.5rem;
+      width: 100%;
+      max-width: 520px;
+      max-height: 90vh;
+      overflow-y: auto;
     }
-    .modal h2 { margin: 0 0 1.25rem; font-size: 1.25rem; font-weight: 700; color: #2d3748; }
+    .modal h2 {
+      margin: 0 0 1.25rem;
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: #2d3748;
+    }
   `,
   template: `
     <div class="page-header">
@@ -103,43 +225,51 @@ interface GroupedEntry extends GuaranteedPayment {
       }
     </div>
 
-    <div class="controls">
-      <div class="toggle-group">
-        <button class="toggle-btn" [class.active]="viewMode() === 'mine'" (click)="setMode('mine')">My entries</button>
-        <button class="toggle-btn" [class.active]="viewMode() === 'all'" (click)="setMode('all')">All managers</button>
-      </div>
-      <div class="nav-row">
-        <button class="nav-btn" (click)="prevMonth()">
-          <ng-icon name="heroChevronLeft" size="16" />
-        </button>
-        <span class="month-label">{{ monthLabel() }}</span>
-        <button class="nav-btn" [disabled]="isCurrentMonth()" (click)="nextMonth()">
-          <ng-icon name="heroChevronRight" size="16" />
-        </button>
-      </div>
-    </div>
-
     @if (loading()) {
       <p class="loading">Loading…</p>
     } @else {
-      <div class="list">
-        @if (entries().length === 0) {
-          <p class="empty-state">No entries for this month.</p>
-        } @else {
-          @for (entry of entries(); track entry.id) {
-            <div class="gp-row" (click)="openDetail(entry.id)">
-              <div class="gp-left">
-                <span class="gp-date">{{ entry.work_date }}</span>
-                <span class="gp-desc">{{ entry.work_description }}</span>
+      <div class="accordion">
+        @if (months().length === 0) {
+          <p class="empty-state">No guaranteed payment entries yet.</p>
+        }
+        @for (grp of months(); track grp.label) {
+          <div>
+            <div class="month-header" [class.open]="grp.open" (click)="toggleMonth(grp)">
+              <div class="month-info">
+                <ng-icon
+                  name="heroChevronRight"
+                  size="16"
+                  [style.transform]="grp.open ? 'rotate(90deg)' : ''"
+                  style="transition: transform 0.15s"
+                />
+                <span class="month-name">{{ grp.label }}</span>
+                <span class="month-count">
+                  {{ grp.entries.length }} entr{{ grp.entries.length === 1 ? 'y' : 'ies' }}
+                </span>
               </div>
-              <div class="gp-right">
-                <span class="status-badge status-{{ entry.status }}">{{ entry.status }}</span>
-                <span class="gp-hours">{{ entry.hours_billed }} hrs</span>
-              </div>
+              <span class="month-total">{{ grp.totalHours.toFixed(2) }} hrs</span>
             </div>
-          }
-          <div class="monthly-total">
-            Total: <strong>{{ totalHours().toFixed(2) }} hrs</strong>
+            @if (grp.open) {
+              <div class="gp-list">
+                @for (entry of grp.entries; track entry.id) {
+                  <div class="gp-row" (click)="openDetail(entry.id)">
+                    <div class="gp-left">
+                      <span class="gp-date">{{ entry.work_date }}</span>
+                      <span class="gp-desc">{{ entry.work_description }}</span>
+                      @if (entry.created_by && users().get(entry.created_by)) {
+                        <span class="gp-sub">{{ users().get(entry.created_by) }}</span>
+                      }
+                    </div>
+                    <div class="gp-right">
+                      <span class="status-badge status-{{ entry.status }}">
+                        {{ entry.status }}
+                      </span>
+                      <span class="gp-hours">{{ entry.hours_billed }} hrs</span>
+                    </div>
+                  </div>
+                }
+              </div>
+            }
           </div>
         }
       </div>
@@ -157,74 +287,92 @@ interface GroupedEntry extends GuaranteedPayment {
 })
 export class GuaranteedPaymentsPage implements OnInit {
   private readonly gpService = inject(GuaranteedPaymentService);
+  private readonly supabase = inject<SupabaseClient>(SUPABASE_CLIENT);
   private readonly roles = inject(RoleService);
   private readonly router = inject(Router);
   private readonly title = inject(Title);
 
   readonly loading = signal(true);
   readonly showForm = signal(false);
-  readonly viewMode = signal<ViewMode>('mine');
-  private readonly currentDate = signal(new Date());
-
   private readonly raw = signal<GuaranteedPayment[]>([]);
+  private readonly openMonths = signal<Set<string>>(new Set<string>());
+  readonly users = signal<Map<string, string>>(new Map());
 
-  readonly monthLabel = computed(() => {
-    const d = this.currentDate();
-    return d.toLocaleString('default', { month: 'long', year: 'numeric' });
+  readonly months = computed<MonthGroup[]>(() => {
+    const entries = this.raw();
+    const open = this.openMonths();
+    const map = new Map<string, MonthGroup>();
+    for (const e of entries) {
+      const d = new Date(e.work_date + 'T00:00:00');
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      if (!map.has(key)) {
+        map.set(key, {
+          year: d.getFullYear(),
+          month: d.getMonth() + 1,
+          label: d.toLocaleString('default', { month: 'long', year: 'numeric' }),
+          entries: [],
+          totalHours: 0,
+          open: open.has(key),
+        });
+      }
+      const grp = map.get(key)!;
+      grp.entries.push(e);
+      grp.totalHours += Number(e.hours_billed);
+    }
+    return Array.from(map.values()).sort(
+      (a, b) => b.year * 100 + b.month - (a.year * 100 + a.month),
+    );
   });
-
-  readonly entries = computed(() => this.raw());
-
-  readonly totalHours = computed(() =>
-    this.raw().reduce((sum, e) => sum + Number(e.hours_billed), 0),
-  );
 
   canManage(): boolean {
     return this.roles.isManagerOrAbove();
   }
 
-  isCurrentMonth(): boolean {
-    const now = new Date();
-    const d = this.currentDate();
-    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
-  }
-
   ngOnInit(): void {
     this.title.setTitle('Guaranteed Payments – DHH');
-    this.loadEntries();
-  }
-
-  setMode(mode: ViewMode): void {
-    this.viewMode.set(mode);
-    this.loadEntries();
-  }
-
-  prevMonth(): void {
-    this.currentDate.update((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1));
-    this.loadEntries();
-  }
-
-  nextMonth(): void {
-    if (this.isCurrentMonth()) return;
-    this.currentDate.update((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1));
+    this.loadUsers();
     this.loadEntries();
   }
 
   private loadEntries(): void {
-    const d = this.currentDate();
-    const year = d.getFullYear();
-    const month = d.getMonth() + 1;
     this.loading.set(true);
-    const obs =
-      this.viewMode() === 'all'
-        ? this.gpService.getAllPayments(year, month)
-        : this.gpService.getMyPayments(year, month);
-    obs.subscribe({
+    this.gpService.getAllPaymentsHistory().subscribe({
       next: (rows) => {
         this.raw.set(rows);
+        if (rows.length > 0 && this.openMonths().size === 0) {
+          const d = new Date(rows[0].work_date + 'T00:00:00');
+          const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+          this.openMonths.set(new Set([key]));
+        }
         this.loading.set(false);
       },
       error: () => this.loading.set(false),
+    });
+  }
+
+  private loadUsers(): void {
+    from(
+      this.supabase
+        .from('user_roles')
+        .select('user_id, first_name, last_name, email')
+        .then(({ data }) => {
+          const map = new Map<string, string>();
+          for (const u of data ?? []) {
+            const name = [u.first_name, u.last_name].filter(Boolean).join(' ');
+            map.set(u.user_id, name || u.email);
+          }
+          return map;
+        }),
+    ).subscribe((m) => this.users.set(m));
+  }
+
+  toggleMonth(grp: MonthGroup): void {
+    const key = `${grp.year}-${String(grp.month).padStart(2, '0')}`;
+    this.openMonths.update((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
     });
   }
 
@@ -234,6 +382,9 @@ export class GuaranteedPaymentsPage implements OnInit {
 
   onSaved(): void {
     this.showForm.set(false);
+    this.loading.set(true);
+    this.raw.set([]);
+    this.openMonths.set(new Set());
     this.loadEntries();
   }
 }

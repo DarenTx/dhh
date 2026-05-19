@@ -139,6 +139,36 @@ export class GuaranteedPaymentService {
     );
   }
 
+  getAllPaymentsHistory(): Observable<GuaranteedPayment[]> {
+    return from(
+      this.supabase
+        .from('guaranteed_payments')
+        .select('*')
+        .eq('is_active', true)
+        .order('work_date', { ascending: false })
+        .then(({ data, error }) => {
+          if (error) throw error;
+          return (data ?? []) as GuaranteedPayment[];
+        }),
+    );
+  }
+
+  getMyPaymentsHistory(): Observable<GuaranteedPayment[]> {
+    return from(
+      this.supabase.auth.getUser().then(async ({ data: { user } }) => {
+        if (!user) return [];
+        const { data, error } = await this.supabase
+          .from('guaranteed_payments')
+          .select('*')
+          .eq('is_active', true)
+          .eq('created_by', user.id)
+          .order('work_date', { ascending: false });
+        if (error) throw error;
+        return (data ?? []) as GuaranteedPayment[];
+      }),
+    );
+  }
+
   getRecentPayments(limit = 5): Observable<GuaranteedPayment[]> {
     return from(
       this.supabase

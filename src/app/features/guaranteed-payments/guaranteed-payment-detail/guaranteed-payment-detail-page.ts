@@ -12,7 +12,9 @@ import { TitleCasePipe } from '@angular/common';
 import { ReactiveFormsModule, FormControl, FormGroup, Validators } from '@angular/forms';
 import { NgIconComponent } from '@ng-icons/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { map } from 'rxjs';
+import { from, map } from 'rxjs';
+import { SupabaseClient } from '@supabase/supabase-js';
+import { SUPABASE_CLIENT } from '../../../core/auth/supabase.provider';
 import {
   GuaranteedPaymentService,
   GuaranteedPayment,
@@ -21,6 +23,7 @@ import {
 import { ApprovalService, ApprovalRequirement } from '../../../core/services/approval.service';
 import { RoleService } from '../../../core/role/role.service';
 import { AuthenticationService } from '../../../core/auth/authentication.service';
+import { SettingsService } from '../../../core/services/settings.service';
 
 @Component({
   selector: 'app-guaranteed-payment-detail-page',
@@ -67,6 +70,38 @@ import { AuthenticationService } from '../../../core/auth/authentication.service
       font-weight: 600;
       color: #2d3748;
       margin: 0 0 1rem;
+    }
+
+    .expense-header {
+      margin-bottom: 1.25rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid #edf2f7;
+    }
+    .expense-title {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: #1a202c;
+      margin: 0 0 0.3rem;
+    }
+    .expense-amount {
+      font-size: 1.125rem;
+      font-weight: 600;
+      color: #2d3748;
+      margin: 0;
+    }
+
+    .approval-section {
+      margin-top: 1rem;
+      padding-top: 1rem;
+      border-top: 1px solid #edf2f7;
+    }
+    .section-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #a0aec0;
+      margin: 0 0 0.75rem;
     }
 
     .detail-grid {
@@ -159,13 +194,31 @@ import { AuthenticationService } from '../../../core/auth/authentication.service
     .approval-row:last-child {
       border-bottom: none;
     }
-    .approver-name {
+    .approver-info {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+    .approver-top {
       display: flex;
       align-items: center;
       flex-wrap: wrap;
       gap: 0.375rem;
       font-size: 0.9375rem;
       color: #2d3748;
+    }
+    .approval-reason {
+      font-size: 0.8125rem;
+      color: #4a5568;
+      margin: 0;
+      padding-left: 2.625rem;
+      font-style: italic;
+    }
+    .auto-approval-info {
+      display: flex;
+      flex-direction: column;
+      gap: 0.375rem;
+      align-items: flex-start;
     }
     .approver-cell {
       display: flex;
@@ -411,23 +464,82 @@ import { AuthenticationService } from '../../../core/auth/authentication.service
       } @else if (!payment()) {
         <p style="color:#718096">Entry not found.</p>
       } @else {
-        <h1>{{ payment()!.hours_billed }} hrs</h1>
-        <p class="meta">{{ payment()!.work_date }}</p>
-
         <div class="card">
-          <p class="card-title">Details</p>
+          <div class="expense-header">
+            <p class="expense-title">{{ submitterName() ?? 'Unknown Submitter' }}</p>
+            <p class="expense-amount">{{ payment()!.hours_billed }} hrs</p>
+          </div>
           <div class="detail-grid">
-            <span class="dl">Status</span>
-            <span>
-              <span class="status-badge status-{{ payment()!.status }}">
-                {{ payment()!.status | titlecase }}
-              </span>
-            </span>
-            <span class="dl">Description</span>
-            <span class="dv">{{ payment()!.work_description }}</span>
             <span class="dl">Work Date</span>
             <span class="dv">{{ payment()!.work_date }}</span>
+            <span class="dl">Description</span>
+            <span class="dv">{{ payment()!.work_description }}</span>
           </div>
+
+          @if (allApprovals().length > 0 || payment()!.status === 'approved') {
+            <div class="approval-section">
+              <p class="section-label">Approval</p>
+              @if (allApprovals().length > 0) {
+                @for (req of allApprovals(); track req.id) {
+                  <div class="approval-row">
+                    <div class="approver-info">
+                      <div class="approver-top">
+                        <span class="approver-cell">
+                          @if (req.approver_avatar_url) {
+                            <img
+                              class="approver-avatar"
+                              [src]="req.approver_avatar_url"
+                              [alt]="req.approver_email ?? ''"
+                            />
+                          } @else {
+                            <span class="approver-avatar-placeholder">
+                              {{
+                                (
+                                  req.approver_first_name?.[0] ??
+                                  req.approver_email?.[0] ??
+                                  '?'
+                                ).toUpperCase()
+                              }}
+                            </span>
+                          }
+                          <span>
+                            @if (req.approver_first_name || req.approver_last_name) {
+                              {{ req.approver_first_name }} {{ req.approver_last_name }}
+                            } @else {
+                              {{ req.approver_email ?? 'Unknown' }}
+                            }
+                          </span>
+                        </span>
+                        <span class="status-badge status-{{ req.status }}">
+                          {{ req.status | titlecase }}
+                        </span>
+                      </div>
+                      @if (req.reason) {
+                        <p class="approval-reason">{{ req.reason }}</p>
+                      } @else if (req.status === 'approved') {
+                        <p class="approval-reason">Manager approved</p>
+                      }
+                    </div>
+                    @if (req.approver_id === currentUserId() && req.status === 'pending') {
+                      <div class="approval-actions">
+                        <button class="btn-approve" (click)="approveReq(req.id)">Approve</button>
+                        <button class="btn-reject" (click)="openReject(req.id)">Reject</button>
+                      </div>
+                    }
+                  </div>
+                }
+              } @else {
+                <div class="auto-approval-info">
+                  <span class="status-badge status-approved">Auto-approved</span>
+                  @if (threshold() !== null) {
+                    <p class="approval-reason" style="padding-left:0">
+                      Under the {{ threshold() }} hr monthly cap
+                    </p>
+                  }
+                </div>
+              }
+            </div>
+          }
 
           @if (canEditOrDelete() || isAdmin()) {
             <div class="action-row">
@@ -443,58 +555,6 @@ import { AuthenticationService } from '../../../core/auth/authentication.service
             </div>
           }
         </div>
-
-        @if (allApprovals().length > 0) {
-          <div class="card">
-            <p class="card-title">Approval Status</p>
-            @for (req of allApprovals(); track req.id) {
-              <div class="approval-row">
-                <span class="approver-name">
-                  <span class="approver-cell">
-                    @if (req.approver_avatar_url) {
-                      <img
-                        class="approver-avatar"
-                        [src]="req.approver_avatar_url"
-                        [alt]="req.approver_email ?? ''"
-                      />
-                    } @else {
-                      <span class="approver-avatar-placeholder">
-                        {{
-                          (
-                            req.approver_first_name?.[0] ??
-                            req.approver_email?.[0] ??
-                            '?'
-                          ).toUpperCase()
-                        }}
-                      </span>
-                    }
-                    <span>
-                      @if (req.approver_first_name || req.approver_last_name) {
-                        {{ req.approver_first_name }} {{ req.approver_last_name }}
-                      } @else {
-                        {{ req.approver_email ?? 'Unknown' }}
-                      }
-                    </span>
-                  </span>
-                  <span class="status-badge status-{{ req.status }}">
-                    {{ req.status | titlecase }}
-                  </span>
-                  @if (req.reason) {
-                    <span style="color:#718096;font-size:0.8125rem;margin-left:0.5rem"
-                      >&mdash; {{ req.reason }}</span
-                    >
-                  }
-                </span>
-                @if (req.approver_id === currentUserId() && req.status === 'pending') {
-                  <div class="approval-actions">
-                    <button class="btn-approve" (click)="approveReq(req.id)">Approve</button>
-                    <button class="btn-reject" (click)="openReject(req.id)">Reject</button>
-                  </div>
-                }
-              </div>
-            }
-          </div>
-        }
       }
     </div>
 
@@ -661,6 +721,8 @@ export class GuaranteedPaymentDetailPage implements OnInit {
   private readonly approvalService = inject(ApprovalService);
   private readonly roles = inject(RoleService);
   private readonly authService = inject(AuthenticationService);
+  private readonly supabase = inject<SupabaseClient>(SUPABASE_CLIENT);
+  private readonly settingsService = inject(SettingsService);
 
   readonly currentUserId = toSignal(
     this.authService.getSession().pipe(map((s) => s?.user?.id ?? null)),
@@ -670,6 +732,8 @@ export class GuaranteedPaymentDetailPage implements OnInit {
   readonly loading = signal(true);
   readonly payment = signal<GuaranteedPayment | null>(null);
   readonly allApprovals = signal<ApprovalRequirement[]>([]);
+  readonly submitterName = signal<string | null>(null);
+  readonly threshold = signal<number | null>(null);
 
   readonly canEditOrDelete = computed(() => {
     const payment = this.payment();
@@ -720,6 +784,9 @@ export class GuaranteedPaymentDetailPage implements OnInit {
     this.title.setTitle('GP Entry – DHH');
     const id = this.route.snapshot.paramMap.get('id')!;
     this.load(id);
+    this.settingsService
+      .getSettings()
+      .subscribe((s) => this.threshold.set(s.guaranteed_payment_hour_cap));
   }
 
   private load(id: string): void {
@@ -728,9 +795,27 @@ export class GuaranteedPaymentDetailPage implements OnInit {
         this.payment.set(gp);
         this.loading.set(false);
         this.loadApprovals(id);
+        if (gp.created_by) {
+          this.loadSubmitter(gp.created_by);
+        }
       },
       error: () => this.loading.set(false),
     });
+  }
+
+  private loadSubmitter(userId: string): void {
+    from(
+      this.supabase
+        .from('user_roles')
+        .select('first_name, last_name, email')
+        .eq('user_id', userId)
+        .single()
+        .then(({ data }) => {
+          if (!data) return null;
+          const name = [data.first_name, data.last_name].filter(Boolean).join(' ');
+          return name || (data.email as string) || null;
+        }),
+    ).subscribe((name) => this.submitterName.set(name));
   }
 
   private loadApprovals(gpId: string): void {

@@ -9,6 +9,9 @@ import {
 import { Router } from '@angular/router';
 import { Title } from '@angular/platform-browser';
 import { NgIconComponent } from '@ng-icons/core';
+import { from } from 'rxjs';
+import { SupabaseClient } from '@supabase/supabase-js';
+import { SUPABASE_CLIENT } from '../../core/auth/supabase.provider';
 import { ExpenseService, ExpenseWithCategory } from '../../core/services/expense.service';
 import { ExpenseFormComponent } from './expense-form/expense-form.component';
 import { RoleService } from '../../core/role/role.service';
@@ -277,6 +280,9 @@ interface MonthGroup {
                     <div class="expense-left">
                       <span class="expense-date">{{ expense.date }}</span>
                       <span class="expense-desc">{{ expense.description }}</span>
+                      @if (expense.created_by && users().get(expense.created_by)) {
+                        <span class="expense-sub">{{ users().get(expense.created_by) }}</span>
+                      }
                       <span class="expense-sub">
                         {{ expense.irs_expense_categories?.name ?? '' }}
                         @if (expense.expense_subcategories?.name) {
@@ -316,6 +322,7 @@ interface MonthGroup {
 })
 export class ExpensesPage implements OnInit {
   private readonly expenseService = inject(ExpenseService);
+  private readonly supabase = inject<SupabaseClient>(SUPABASE_CLIENT);
   private readonly roles = inject(RoleService);
   private readonly router = inject(Router);
   private readonly title = inject(Title);
@@ -324,6 +331,7 @@ export class ExpensesPage implements OnInit {
   readonly showForm = signal(false);
   private readonly raw = signal<ExpenseWithCategory[]>([]);
   private readonly openMonths = signal<Set<string>>(new Set<string>());
+  readonly users = signal<Map<string, string>>(new Map());
 
   readonly months = computed<MonthGroup[]>(() => {
     const expenses = this.raw();
@@ -357,7 +365,24 @@ export class ExpensesPage implements OnInit {
 
   ngOnInit(): void {
     this.title.setTitle('Expenses – DHH');
+    this.loadUsers();
     this.loadAll();
+  }
+
+  private loadUsers(): void {
+    from(
+      this.supabase
+        .from('user_roles')
+        .select('user_id, first_name, last_name, email')
+        .then(({ data }) => {
+          const map = new Map<string, string>();
+          for (const u of data ?? []) {
+            const name = [u.first_name, u.last_name].filter(Boolean).join(' ');
+            map.set(u.user_id, name || u.email);
+          }
+          return map;
+        }),
+    ).subscribe((m) => this.users.set(m));
   }
 
   private loadAll(): void {
