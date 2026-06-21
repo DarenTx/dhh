@@ -263,12 +263,12 @@ type WizardStep = 1 | 2;
           (dragleave)="dragover.set(false)"
           (drop)="onDrop($event)"
         >
-          <input type="file" accept="application/pdf" (change)="onFileChange($event)" />
+          <input type="file" accept="application/pdf,image/jpeg,image/png,image/gif" (change)="onFileChange($event)" />
           <div class="drop-icon">
             <ng-icon name="heroDocumentArrowUp" size="32" />
           </div>
           <p class="drop-label">Drop a PDF here or click to browse</p>
-          <p class="drop-hint">PDF only · max 20 MB</p>
+          <p class="drop-hint">PDF, PNG, JPG, or GIF · max 20 MB</p>
           @if (selectedFile()) {
             <div class="file-selected">
               <ng-icon name="heroDocumentText" size="16" />
@@ -380,8 +380,9 @@ export class DocumentUploadWizardComponent implements OnInit {
 
   private setFile(file: File | null): void {
     if (!file) return;
-    if (file.type !== 'application/pdf') {
-      this.stepError.set('Only PDF files are accepted.');
+    const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/gif'];
+    if (!allowedTypes.includes(file.type)) {
+      this.stepError.set('Only PDF, PNG, JPG, and GIF files are accepted.');
       return;
     }
     if (file.size > 20 * 1024 * 1024) {
