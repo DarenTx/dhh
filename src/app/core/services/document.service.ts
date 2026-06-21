@@ -29,6 +29,16 @@ export type UpdateDocumentPayload = Partial<
   Pick<Document, 'title' | 'description' | 'property_id'>
 >;
 
+export interface DocumentFile {
+  id: string;
+  document_id: string;
+  storage_path: string;
+  original_name: string;
+  content_type: string;
+  sort_order: number;
+  created_at: string;
+}
+
 const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
 
 @Injectable({ providedIn: 'root' })
@@ -100,6 +110,24 @@ export class DocumentService {
         .from('documents')
         .update({ storage_path: storagePath })
         .eq('id', id)
+        .then(({ error }) => {
+          if (error) throw error;
+        }),
+    );
+  }
+
+  addFiles(documentId: string, storagePaths: string[], files: File[]): Observable<void> {
+    const rows = storagePaths.map((path, i) => ({
+      document_id: documentId,
+      storage_path: path,
+      original_name: files[i].name,
+      content_type: files[i].type,
+      sort_order: i,
+    }));
+    return from(
+      this.supabase
+        .from('document_files')
+        .insert(rows)
         .then(({ error }) => {
           if (error) throw error;
         }),

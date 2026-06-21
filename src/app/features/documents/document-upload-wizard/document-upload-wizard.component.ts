@@ -8,7 +8,7 @@ import {
   DocumentPropertyOption,
 } from '../../../core/services/ai-extraction.service';
 import { PropertyService, Property } from '../../../core/services/property.service';
-import { switchMap, map } from 'rxjs';
+import { switchMap, map, forkJoin } from 'rxjs';
 
 type WizardStep = 1 | 2;
 
@@ -116,14 +116,21 @@ type WizardStep = 1 | 2;
       color: #a0aec0;
       margin: 0.375rem 0 0;
     }
-    .file-selected {
+    .file-list {
       margin-top: 0.75rem;
       display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      align-self: stretch;
+      text-align: left;
+    }
+    .file-list-item {
+      display: flex;
       align-items: center;
-      justify-content: center;
       gap: 0.5rem;
       font-size: 0.875rem;
       color: #2d3748;
+      padding: 0.125rem 0;
     }
     .form-field {
       display: flex;
@@ -253,7 +260,11 @@ type WizardStep = 1 | 2;
       @if (extracting()) {
         <div class="loading-state">
           <div class="spinner"></div>
-          <span>Analyzing document with AI…</span>
+          <span>{{
+            selectedFiles()[0]?.type === 'application/pdf'
+              ? 'Analyzing document with AI…'
+              : 'Uploading files…'
+          }}</span>
         </div>
       } @else {
         <label
@@ -266,17 +277,24 @@ type WizardStep = 1 | 2;
           <input
             type="file"
             accept="application/pdf,image/jpeg,image/png,image/gif"
+            multiple
             (change)="onFileChange($event)"
           />
           <div class="drop-icon">
             <ng-icon name="heroDocumentArrowUp" size="32" />
           </div>
-          <p class="drop-label">Drop a PDF here or click to browse</p>
-          <p class="drop-hint">PDF, PNG, JPG, or GIF · max 20 MB</p>
-          @if (selectedFile()) {
-            <div class="file-selected">
-              <ng-icon name="heroDocumentText" size="16" />
-              {{ selectedFile()!.name }}
+          <p class="drop-label">Drop files here or click to browse</p>
+          <p class="drop-hint">
+            PDF (single) or images: PNG, JPG, GIF (multiple) &middot; max 20 MB each
+          </p>
+          @if (selectedFiles().length) {
+            <div class="file-list">
+              @for (f of selectedFiles(); track f.name) {
+                <div class="file-list-item">
+                  <ng-icon name="heroDocumentText" size="16" />
+                  {{ f.name }}
+                </div>
+              }
             </div>
           }
         </label>
@@ -287,7 +305,12 @@ type WizardStep = 1 | 2;
 
         <div class="form-actions">
           <button class="btn-cancel" type="button" (click)="onCancel()">Cancel</button>
-          <button class="btn-primary" type="button" [disabled]="!selectedFile()" (click)="onNext()">
+          <button
+            class="btn-primary"
+            type="button"
+            [disabled]="!selectedFiles().length"
+            (click)="onNext()"
+          >
             Next: Review Details
           </button>
         </div>
@@ -347,14 +370,14 @@ export class DocumentUploadWizardComponent implements OnInit {
   private readonly propertyService = inject(PropertyService);
 
   readonly step = signal<WizardStep>(1);
-  readonly selectedFile = signal<File | null>(null);
+  readonly selectedFiles = signal<File[]>([]);
   readonly dragover = signal(false);
   readonly extracting = signal(false);
   readonly saving = signal(false);
   readonly stepError = signal<string | null>(null);
   readonly properties = signal<Property[]>([]);
 
-  private draftPath: string | null = null;
+  private draftPaths: string[] = [];
 
   readonly form = new FormGroup({
     title: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
@@ -368,7 +391,7 @@ export class DocumentUploadWizardComponent implements OnInit {
 
   onFileChange(event: Event): void {
     const input = event.target as HTMLInputElement;
-    this.setFile(input.files?.[0] ?? null);
+    this.setFiles(Array.from(input.files ?? []));
   }
 
   onDragOver(event: DragEvent): void {
@@ -379,114 +402,138 @@ export class DocumentUploadWizardComponent implements OnInit {
   onDrop(event: DragEvent): void {
     event.preventDefault();
     this.dragover.set(false);
-    this.setFile(event.dataTransfer?.files[0] ?? null);
+    this.setFiles(Array.from(event.dataTransfer?.files ?? []));
   }
 
-  private setFile(file: File | null): void {
-    if (!file) return;
+  private setFiles(files: File[]): void {
+    if (!files.length) return;
     const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/gif'];
-    if (!allowedTypes.includes(file.type)) {
-      this.stepError.set('Only PDF, PNG, JPG, and GIF files are accepted.');
+    const invalid = files.find((f) => !allowedTypes.includes(f.type));
+    if (invalid) {
+      this.stepError.set(
+        `"${invalid.name}" is not an accepted file type. Only PDF, PNG, JPG, and GIF are allowed.`,
+      );
       return;
     }
-    if (file.size > 20 * 1024 * 1024) {
-      this.stepError.set('File must be under 20 MB.');
+    const hasPdf = files.some((f) => f.type === 'application/pdf');
+    if (hasPdf && files.length > 1) {
+      this.stepError.set('PDF documents must be uploaded one at a time.');
       return;
     }
-    this.selectedFile.set(file);
+    const oversized = files.find((f) => f.size > 20 * 1024 * 1024);
+    if (oversized) {
+      this.stepError.set(`"${oversized.name}" exceeds the 20 MB limit.`);
+      return;
+    }
+    this.selectedFiles.set(files);
     this.stepError.set(null);
   }
 
   onNext(): void {
-    const file = this.selectedFile();
-    if (!file) return;
+    const files = this.selectedFiles();
+    if (!files.length) return;
 
     this.extracting.set(true);
     this.stepError.set(null);
 
-    this.storageService
-      .uploadDraft(file)
-      .pipe(
-        switchMap((draftPath) => {
-          this.draftPath = draftPath;
+    const isPdf = files[0].type === 'application/pdf';
+
+    // Upload all selected files as drafts first
+    forkJoin(files.map((f) => this.storageService.uploadDraft(f))).subscribe({
+      next: (paths) => {
+        this.draftPaths = paths;
+
+        if (isPdf) {
+          // AI extraction from the single PDF draft
           const propertyOptions: DocumentPropertyOption[] = [
             { id: null, address: 'LLC' },
             ...this.properties().map((p) => ({ id: p.id, address: p.address_line1 })),
           ];
-          return this.aiService.extractDocument({
-            storage_bucket: 'documents',
-            storage_path: draftPath,
-            properties: propertyOptions,
-          });
-        }),
-      )
-      .subscribe({
-        next: (result) => {
+          this.aiService
+            .extractDocument({
+              storage_bucket: 'documents',
+              storage_path: paths[0],
+              properties: propertyOptions,
+            })
+            .subscribe({
+              next: (result) => {
+                this.extracting.set(false);
+                const fields = result.extracted_fields;
+                this.form.setValue({
+                  title: fields.title ?? '',
+                  description: fields.description ?? null,
+                  property_id: fields.property_id ?? null,
+                });
+                this.step.set(2);
+              },
+              error: (err: Error) => {
+                this.extracting.set(false);
+                this.stepError.set(err.message ?? 'AI extraction failed. Please try again.');
+              },
+            });
+        } else {
+          // Images: skip AI extraction, go straight to step 2
           this.extracting.set(false);
-          const fields = result.extracted_fields;
-          this.form.setValue({
-            title: fields.title ?? '',
-            description: fields.description ?? null,
-            property_id: fields.property_id ?? null,
-          });
+          this.form.setValue({ title: '', description: null, property_id: null });
           this.step.set(2);
-        },
-        error: (err: Error) => {
-          this.extracting.set(false);
-          this.stepError.set(err.message ?? 'AI extraction failed. Please try again.');
-        },
-      });
+        }
+      },
+      error: (err: Error) => {
+        this.extracting.set(false);
+        this.stepError.set(err.message ?? 'Upload failed. Please try again.');
+      },
+    });
   }
 
   onBack(): void {
     this.step.set(1);
     this.stepError.set(null);
-    if (this.draftPath) {
-      this.storageService.deleteStorageObject(this.draftPath).subscribe();
-      this.draftPath = null;
-    }
+    this.draftPaths.forEach((p) => this.storageService.deleteStorageObject(p).subscribe());
+    this.draftPaths = [];
   }
 
   onCancel(): void {
-    if (this.draftPath) {
-      this.storageService.deleteStorageObject(this.draftPath).subscribe();
-      this.draftPath = null;
-    }
+    this.draftPaths.forEach((p) => this.storageService.deleteStorageObject(p).subscribe());
+    this.draftPaths = [];
     this.cancelled.emit();
   }
 
   onSave(): void {
-    if (this.form.invalid || !this.draftPath) return;
+    if (this.form.invalid || !this.draftPaths.length) return;
 
     this.saving.set(true);
     this.stepError.set(null);
 
-    const draft = this.draftPath;
+    const drafts = this.draftPaths;
+    const files = this.selectedFiles();
     const payload = {
       title: this.form.controls.title.value,
       description: this.form.controls.description.value,
       property_id: this.form.controls.property_id.value,
-      storage_path: draft,
+      storage_path: drafts[0], // temporary; overwritten after finalize
     };
 
     this.documentService
       .create(payload)
       .pipe(
         switchMap((doc) =>
-          this.storageService
-            .finalizeUpload(draft, doc.id)
-            .pipe(
-              switchMap((permanentPath) =>
-                this.documentService
-                  .finalizeDocumentPath(doc.id, permanentPath)
-                  .pipe(map(() => ({ ...doc, storage_path: permanentPath }))),
+          forkJoin(
+            drafts.map((draft, i) =>
+              this.storageService.finalizeUpload(draft, doc.id, files[i].name),
+            ),
+          ).pipe(
+            switchMap((permanentPaths) =>
+              this.documentService.finalizeDocumentPath(doc.id, permanentPaths[0]).pipe(
+                switchMap(() => this.documentService.addFiles(doc.id, permanentPaths, files)),
+                map(() => ({ ...doc, storage_path: permanentPaths[0] })),
               ),
             ),
+          ),
         ),
       )
       .subscribe({
         next: (doc) => {
-          this.draftPath = null;
+          this.draftPaths = [];
           this.saving.set(false);
           this.saved.emit(doc);
         },

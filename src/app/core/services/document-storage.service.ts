@@ -9,11 +9,12 @@ export class DocumentStorageService {
   private readonly bucket = 'documents';
 
   uploadDraft(file: File): Observable<string> {
-    const storagePath = `drafts/${crypto.randomUUID()}.pdf`;
+    const ext = file.name.includes('.') ? file.name.split('.').pop()! : 'bin';
+    const storagePath = `drafts/${crypto.randomUUID()}.${ext}`;
     return from(
       this.supabase.storage
         .from(this.bucket)
-        .upload(storagePath, file, { contentType: 'application/pdf' })
+        .upload(storagePath, file, { contentType: file.type })
         .then(({ data, error }) => {
           if (error) throw error;
           return data!.path;
@@ -21,8 +22,11 @@ export class DocumentStorageService {
     );
   }
 
-  finalizeUpload(draftPath: string, documentId: string): Observable<string> {
-    const permanentPath = `documents/${documentId}.pdf`;
+  finalizeUpload(draftPath: string, documentId: string, originalName: string): Observable<string> {
+    const ext = originalName.includes('.')
+      ? originalName.split('.').pop()!
+      : (draftPath.split('.').pop() ?? 'bin');
+    const permanentPath = `documents/${documentId}/${crypto.randomUUID()}.${ext}`;
     return from(
       this.supabase.storage
         .from(this.bucket)
