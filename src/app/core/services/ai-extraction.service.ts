@@ -78,6 +78,7 @@ export interface DocumentExtractionRequest {
   extraction_draft_id?: string;
   storage_bucket: string;
   storage_path: string;
+  storage_paths?: string[];
   properties: DocumentPropertyOption[];
 }
 

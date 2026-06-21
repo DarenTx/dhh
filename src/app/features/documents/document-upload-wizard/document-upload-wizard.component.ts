@@ -436,47 +436,39 @@ export class DocumentUploadWizardComponent implements OnInit {
     this.extracting.set(true);
     this.stepError.set(null);
 
-    const isPdf = files[0].type === 'application/pdf';
-
     // Upload all selected files as drafts first
     forkJoin(files.map((f) => this.storageService.uploadDraft(f))).subscribe({
       next: (paths) => {
         this.draftPaths = paths;
 
-        if (isPdf) {
-          // AI extraction from the single PDF draft
-          const propertyOptions: DocumentPropertyOption[] = [
-            { id: null, address: 'LLC' },
-            ...this.properties().map((p) => ({ id: p.id, address: p.address_line1 })),
-          ];
-          this.aiService
-            .extractDocument({
-              storage_bucket: 'documents',
-              storage_path: paths[0],
-              properties: propertyOptions,
-            })
-            .subscribe({
-              next: (result) => {
-                this.extracting.set(false);
-                const fields = result.extracted_fields;
-                this.form.setValue({
-                  title: fields.title ?? '',
-                  description: fields.description ?? null,
-                  property_id: fields.property_id ?? null,
-                });
-                this.step.set(2);
-              },
-              error: (err: Error) => {
-                this.extracting.set(false);
-                this.stepError.set(err.message ?? 'AI extraction failed. Please try again.');
-              },
-            });
-        } else {
-          // Images: skip AI extraction, go straight to step 2
-          this.extracting.set(false);
-          this.form.setValue({ title: '', description: null, property_id: null });
-          this.step.set(2);
-        }
+        // Always run AI extraction on the first file regardless of type or count.
+        const propertyOptions: DocumentPropertyOption[] = [
+          { id: null, address: 'LLC' },
+          ...this.properties().map((p) => ({ id: p.id, address: p.address_line1 })),
+        ];
+        this.aiService
+          .extractDocument({
+            storage_bucket: 'documents',
+            storage_path: paths[0],
+            storage_paths: paths.slice(1),
+            properties: propertyOptions,
+          })
+          .subscribe({
+            next: (result) => {
+              this.extracting.set(false);
+              const fields = result.extracted_fields;
+              this.form.setValue({
+                title: fields.title ?? '',
+                description: fields.description ?? null,
+                property_id: fields.property_id ?? null,
+              });
+              this.step.set(2);
+            },
+            error: (err: Error) => {
+              this.extracting.set(false);
+              this.stepError.set(err.message ?? 'AI extraction failed. Please try again.');
+            },
+          });
       },
       error: (err: Error) => {
         this.extracting.set(false);

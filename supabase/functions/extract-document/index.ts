@@ -9,6 +9,7 @@ interface ExtractDocumentRequest {
   extraction_draft_id?: string;
   storage_bucket: string;
   storage_path: string;
+  storage_paths?: string[];
   properties: PropertyOption[];
 }
 
@@ -122,44 +123,60 @@ Deno.serve(async (req: Request) => {
       return errorResponse(500, 'Failed to initialize extraction draft');
     }
 
-    const { data: fileBlob, error: downloadError } = await adminClient.storage
-      .from(payload.storage_bucket)
-      .download(payload.storage_path);
+    const SUPPORTED_MIME_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/gif'];
 
-    if (downloadError || !fileBlob) {
-      return await failureResponse(
-        adminClient,
-        draftId,
-        startedAt,
-        'Document file not found in storage',
-        404,
-        GEMINI_MODEL,
-        downloadError?.message,
-      );
+    // Resolve the full list of paths to download (deduplicated, primary path always first)
+    const allPaths = payload.storage_paths?.length
+      ? [payload.storage_path, ...payload.storage_paths.filter((p) => p !== payload.storage_path)]
+      : [payload.storage_path];
+
+    const fileDownloads = await Promise.all(
+      allPaths.map((path) => adminClient.storage.from(payload.storage_bucket).download(path)),
+    );
+
+    for (let i = 0; i < fileDownloads.length; i++) {
+      const { data, error } = fileDownloads[i];
+      if (error || !data) {
+        return await failureResponse(
+          adminClient,
+          draftId,
+          startedAt,
+          `File not found in storage: ${allPaths[i]}`,
+          404,
+          GEMINI_MODEL,
+          error?.message,
+        );
+      }
+      if (!SUPPORTED_MIME_TYPES.includes(data.type)) {
+        return await failureResponse(
+          adminClient,
+          draftId,
+          startedAt,
+          `Unsupported file type: ${data.type}. Supported types are PDF, JPEG, PNG, and GIF.`,
+          400,
+          GEMINI_MODEL,
+        );
+      }
     }
 
-    if (fileBlob.type !== 'application/pdf') {
-      return await failureResponse(
-        adminClient,
-        draftId,
-        startedAt,
-        'Only PDF files are supported for document extraction',
-        400,
-        GEMINI_MODEL,
-      );
-    }
-
-    const bytes = new Uint8Array(await fileBlob.arrayBuffer());
-    const base64 = toBase64(bytes);
+    const inlineDataParts = await Promise.all(
+      fileDownloads.map(async ({ data }) => ({
+        inlineData: {
+          mimeType: data!.type,
+          data: toBase64(new Uint8Array(await data!.arrayBuffer())),
+        },
+      })),
+    );
 
     // Build a property lookup string for the prompt
     const propertyListText = payload.properties
       .map((p) => `  - id: ${p.id ?? 'null'}, address: "${p.address}"`)
       .join('\n');
 
+    const fileCount = allPaths.length;
     const prompt = [
       'You are a document classifier for a real estate property management company.',
-      'Analyze this PDF document and return JSON only — no markdown, no code fences.',
+      `Analyze the ${fileCount > 1 ? `${fileCount} attached files as a single document` : 'attached file'} and return JSON only — no markdown, no code fences.`,
       '',
       'Return this exact JSON shape:',
       '{',
@@ -188,15 +205,7 @@ Deno.serve(async (req: Request) => {
       contents: [
         {
           role: 'user',
-          parts: [
-            { text: prompt },
-            {
-              inlineData: {
-                mimeType: 'application/pdf',
-                data: base64,
-              },
-            },
-          ],
+          parts: [{ text: prompt }, ...inlineDataParts],
         },
       ],
     });
