@@ -263,7 +263,11 @@ type WizardStep = 1 | 2;
           (dragleave)="dragover.set(false)"
           (drop)="onDrop($event)"
         >
-          <input type="file" accept="application/pdf,image/jpeg,image/png,image/gif" (change)="onFileChange($event)" />
+          <input
+            type="file"
+            accept="application/pdf,image/jpeg,image/png,image/gif"
+            (change)="onFileChange($event)"
+          />
           <div class="drop-icon">
             <ng-icon name="heroDocumentArrowUp" size="32" />
           </div>
