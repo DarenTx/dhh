@@ -275,7 +275,42 @@ Deno.serve(async (req: Request) => {
       body: JSON.stringify({}),
     });
 
-    return jsonResponse({ queued: toQueue.length, total_found: allMessageIds.length });
+    // Also return how many are still pending so the UI can auto-drain
+    const { count: remaining } = await adminClient
+      .from('gmail_processed_messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'error')
+      .lt('retry_count', 5);
+
+    return jsonResponse({
+      queued: toQueue.length,
+      total_found: allMessageIds.length,
+      remaining: remaining ?? 0,
+    });
+  }
+
+  // -- Action: drain ---------------------------------------------------------
+  // Fires process-gmail if there are still pending messages.
+  // Called repeatedly by the UI after backfill until remaining = 0.
+  if (body.action === 'drain') {
+    const { count } = await adminClient
+      .from('gmail_processed_messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'error')
+      .lt('retry_count', 5);
+
+    const remaining = count ?? 0;
+    if (remaining > 0) {
+      await fetch(`${SUPABASE_URL}/functions/v1/process-gmail`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: '{}',
+      });
+    }
+    return jsonResponse({ remaining });
   }
 
   return errorResponse(400, `Unknown action: ${body.action}`);

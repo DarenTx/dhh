@@ -307,13 +307,34 @@ export class SettingsService {
     );
   }
 
-  backfillGmail(): Observable<{ queued: number; total_found: number; message?: string }> {
+  backfillGmail(): Observable<{
+    queued: number;
+    total_found: number;
+    remaining: number;
+    message?: string;
+  }> {
     return from(
       this.supabase.functions
         .invoke('gmail-oauth', { body: { action: 'backfill' } })
         .then(({ data, error }) => {
           if (error) throw error;
-          return data as { queued: number; total_found: number; message?: string };
+          return data as {
+            queued: number;
+            total_found: number;
+            remaining: number;
+            message?: string;
+          };
+        }),
+    );
+  }
+
+  drainGmailQueue(): Observable<{ remaining: number }> {
+    return from(
+      this.supabase.functions
+        .invoke('gmail-oauth', { body: { action: 'drain' } })
+        .then(({ data, error }) => {
+          if (error) throw error;
+          return data as { remaining: number };
         }),
     );
   }

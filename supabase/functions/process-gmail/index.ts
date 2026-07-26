@@ -4,6 +4,9 @@ const CONFIDENCE_THRESHOLD = 0.75;
 const MAX_RETRY_COUNT = 5;
 const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
 const MAX_BODY_CHARS = 2000;
+// Process at most this many messages per invocation to stay within the 60s wall-clock timeout.
+// Each message takes ~3-5s (Gemini call + Gmail API). 10 messages ≈ 30-50s — safe margin.
+const BATCH_SIZE = 10;
 
 const SUPPORTED_MIME_TYPES = [
   'application/pdf',
@@ -145,10 +148,11 @@ Deno.serve(async (req: Request) => {
     .from('gmail_processed_messages')
     .select('message_id')
     .eq('status', 'error')
-    .lt('retry_count', MAX_RETRY_COUNT);
+    .lt('retry_count', MAX_RETRY_COUNT)
+    .limit(BATCH_SIZE);
 
   const retryIds = (retryRows ?? []).map((r: { message_id: string }) => r.message_id);
-  const allIds = [...new Set([...newMessageIds, ...retryIds])];
+  const allIds = [...new Set([...newMessageIds, ...retryIds])].slice(0, BATCH_SIZE);
 
   const failedMessageIds: string[] = [];
 

@@ -3,6 +3,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { DatePipe } from '@angular/common';
 import { ReactiveFormsModule, FormsModule, FormBuilder, Validators } from '@angular/forms';
 import { Router, ActivatedRoute } from '@angular/router';
+import { interval, switchMap, takeWhile, take } from 'rxjs';
 import { NgIconComponent } from '@ng-icons/core';
 import {
   AppSettings,
@@ -846,21 +847,58 @@ export class SettingsPage {
     this.gmailConnectError.set(null);
     this.settingsService.backfillGmail().subscribe({
       next: (result) => {
-        this.gmailBackfilling.set(false);
         if (result.message) {
+          this.gmailBackfilling.set(false);
           this.gmailBackfillResult.set(result.message);
-        } else {
-          this.gmailBackfillResult.set(
-            `Found ${result.total_found} emails — queued ${result.queued} for processing.`,
-          );
+          return;
         }
-        this.loadGmailHealth();
+        this.gmailBackfillResult.set(
+          `Found ${result.total_found} emails — processing in batches (${result.remaining} remaining)…`,
+        );
+        if (result.remaining > 0) {
+          this.autoDrain(result.remaining);
+        } else {
+          this.gmailBackfilling.set(false);
+          this.gmailBackfillResult.set(`Done — processed ${result.total_found} emails.`);
+          this.loadGmailHealth();
+        }
       },
       error: (err) => {
         this.gmailBackfilling.set(false);
         this.gmailConnectError.set(err?.message ?? 'Backfill failed.');
       },
     });
+  }
+
+  private autoDrain(initialRemaining: number): void {
+    let remaining = initialRemaining;
+    // Poll every 45s: wait for the current batch to finish then fire the next one
+    interval(45_000)
+      .pipe(
+        switchMap(() => this.settingsService.drainGmailQueue()),
+        takeWhile((r) => {
+          remaining = r.remaining;
+          return r.remaining > 0;
+        }, true), // emit the last value (remaining=0) then complete
+        take(30), // safety cap — never loop more than 30 times (~22 minutes)
+      )
+      .subscribe({
+        next: (r) => {
+          this.gmailBackfillResult.set(
+            r.remaining > 0
+              ? `Processing… ${r.remaining} emails remaining.`
+              : 'All emails processed!',
+          );
+        },
+        complete: () => {
+          this.gmailBackfilling.set(false);
+          this.loadGmailHealth();
+        },
+        error: (err) => {
+          this.gmailBackfilling.set(false);
+          this.gmailConnectError.set(err?.message ?? 'Drain failed.');
+        },
+      });
   }
 
   addAllowEntry(): void {
