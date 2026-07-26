@@ -1,9 +1,15 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, effect, inject, signal } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { DatePipe } from '@angular/common';
 import { ReactiveFormsModule, FormsModule, FormBuilder, Validators } from '@angular/forms';
+import { Router, ActivatedRoute } from '@angular/router';
 import { NgIconComponent } from '@ng-icons/core';
 import {
   AppSettings,
   ExpenseSubcategory,
+  GmailAllowListEntry,
+  GmailConfig,
+  GmailHealth,
   InspectionTag,
   IrsCategory,
   SettingsService,
@@ -26,7 +32,7 @@ const ROOM_TYPE_GROUP_LABELS: Record<string, string> = {
 @Component({
   selector: 'app-settings-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, FormsModule, NgIconComponent],
+  imports: [ReactiveFormsModule, FormsModule, NgIconComponent, DatePipe],
   styles: `
     :host {
       display: block;
@@ -227,6 +233,86 @@ const ROOM_TYPE_GROUP_LABELS: Record<string, string> = {
         border-bottom: none;
       }
     }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.375rem;
+      padding: 0.25rem 0.625rem;
+      border-radius: 9999px;
+      font-size: 0.8125rem;
+      font-weight: 600;
+
+      &.connected {
+        background: #c6f6d5;
+        color: #276749;
+      }
+      &.reauth {
+        background: #feebc8;
+        color: #7b341e;
+      }
+      &.disconnected {
+        background: #e2e8f0;
+        color: #4a5568;
+      }
+    }
+
+    .gmail-actions {
+      display: flex;
+      gap: 0.5rem;
+      margin-top: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .health-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 0.375rem 0;
+      border-bottom: 1px solid #edf2f7;
+      font-size: 0.9375rem;
+
+      &:last-of-type {
+        border-bottom: none;
+      }
+    }
+
+    .health-label {
+      color: #718096;
+    }
+    .health-value {
+      color: #2d3748;
+      font-weight: 500;
+    }
+    .health-error {
+      color: #c53030;
+      font-weight: 600;
+    }
+
+    .allow-list-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.375rem 0;
+      border-bottom: 1px solid #edf2f7;
+      font-size: 0.9375rem;
+
+      &:last-of-type {
+        border-bottom: none;
+      }
+    }
+
+    .allow-list-pattern {
+      flex: 1;
+      color: #2d3748;
+      font-family: monospace;
+    }
+    .allow-list-label {
+      flex: 1;
+      color: #718096;
+    }
+    .dimmed {
+      opacity: 0.45;
+    }
   `,
   template: `
     <div class="page-header">
@@ -371,11 +457,157 @@ const ROOM_TYPE_GROUP_LABELS: Record<string, string> = {
         </div>
       }
     </div>
+
+    <div class="section">
+      <h2>Gmail Connection</h2>
+      <div class="settings-card">
+        @if (gmailConfig(); as cfg) {
+          <div style="display:flex;align-items:center;gap:1rem;">
+            <span
+              class="status-badge"
+              [class.connected]="cfg.auth_status === 'connected'"
+              [class.reauth]="cfg.auth_status === 'reauth_required'"
+              [class.disconnected]="cfg.auth_status === 'disconnected'"
+            >
+              @if (cfg.auth_status === 'connected') {
+                • Connected
+              } @else if (cfg.auth_status === 'reauth_required') {
+                ⚠ Re-auth Required
+              } @else {
+                ○ Disconnected
+              }
+            </span>
+            @if (cfg.connected_at) {
+              <span style="font-size:0.875rem;color:#718096;"
+                >Since {{ cfg.connected_at | date: 'mediumDate' }}</span
+              >
+            }
+          </div>
+          @if (cfg.auth_status === 'reauth_required') {
+            <p class="error-msg" style="margin-top:0.75rem;">
+              The Gmail connection needs to be re-authenticated.
+            </p>
+          }
+          <div class="gmail-actions">
+            @if (cfg.auth_status === 'connected') {
+              <button
+                class="btn btn-danger"
+                (click)="disconnectGmail()"
+                [disabled]="gmailConnecting()"
+              >
+                Disconnect Gmail
+              </button>
+            } @else {
+              <button
+                class="btn btn-primary"
+                (click)="connectGmail()"
+                [disabled]="gmailConnecting()"
+              >
+                <ng-icon name="heroArrowPath" size="16" />
+                {{
+                  cfg.auth_status === 'reauth_required' ? 'Re-authenticate Gmail' : 'Connect Gmail'
+                }}
+              </button>
+            }
+          </div>
+        } @else {
+          <p style="color:#718096;">Loading…</p>
+        }
+        @if (gmailConnectError()) {
+          <p class="error-msg">{{ gmailConnectError() }}</p>
+        }
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Gmail Allow List</h2>
+      <div class="settings-card">
+        @for (entry of gmailAllowList(); track entry.id) {
+          <div class="allow-list-row" [class.dimmed]="!entry.is_active">
+            <span class="allow-list-pattern">{{ entry.pattern }}</span>
+            <span class="allow-list-label">{{ entry.label }}</span>
+            <button
+              class="btn btn-sm"
+              style="background:#e2e8f0;color:#4a5568;"
+              (click)="toggleAllowEntry(entry)"
+            >
+              {{ entry.is_active ? 'Disable' : 'Enable' }}
+            </button>
+            <button class="btn btn-sm btn-danger" (click)="deleteAllowEntry(entry.id)">
+              <ng-icon name="heroTrash" size="13" />
+            </button>
+          </div>
+        }
+        @if (gmailAllowList().length === 0) {
+          <p style="color:#718096;font-size:0.875rem;margin:0;">No entries yet.</p>
+        }
+        <div class="add-form" style="margin-top:1rem;">
+          <input
+            type="text"
+            placeholder="domain.com or user@domain.com"
+            [(ngModel)]="newAllowPattern"
+            [ngModelOptions]="{ standalone: true }"
+          />
+          <input
+            type="text"
+            placeholder="Label (e.g. Stessa)"
+            [(ngModel)]="newAllowLabel"
+            [ngModelOptions]="{ standalone: true }"
+          />
+          <button class="btn btn-primary btn-sm" (click)="addAllowEntry()">
+            <ng-icon name="heroPlus" size="14" /> Add
+          </button>
+        </div>
+        @if (allowListError()) {
+          <p class="error-msg">{{ allowListError() }}</p>
+        }
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Gmail Processor Health</h2>
+      <div class="settings-card">
+        @if (gmailHealth(); as h) {
+          <div class="health-row">
+            <span class="health-label">Errors (last 7 days)</span>
+            <span
+              [class.health-error]="h.error_count_7d > 0"
+              [class.health-value]="h.error_count_7d === 0"
+              >{{ h.error_count_7d }}</span
+            >
+          </div>
+          <div class="health-row">
+            <span class="health-label">Permanently failed</span>
+            <span
+              [class.health-error]="h.permanently_failed_count > 0"
+              [class.health-value]="h.permanently_failed_count === 0"
+              >{{ h.permanently_failed_count }}</span
+            >
+          </div>
+          <div class="health-row">
+            <span class="health-label">Last successful run</span>
+            <span class="health-value">{{
+              h.last_processed_at ? (h.last_processed_at | date: 'medium') : 'Never'
+            }}</span>
+          </div>
+          @if (h.last_error_detail) {
+            <div class="health-row">
+              <span class="health-label">Last error</span>
+              <span class="health-error">{{ h.last_error_detail }}</span>
+            </div>
+          }
+        } @else {
+          <p style="color:#718096;">Loading…</p>
+        }
+      </div>
+    </div>
   `,
 })
 export class SettingsPage {
   private readonly settingsService = inject(SettingsService);
   private readonly fb = inject(FormBuilder);
+  private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
 
   readonly savingSettings = signal(false);
   readonly settingsSaved = signal(false);
@@ -385,6 +617,17 @@ export class SettingsPage {
   readonly expandedCategory = signal<number | null>(null);
   readonly inspectionTags = signal<Partial<Record<string, InspectionTag[]>>>({});
   readonly expandedInspectionGroup = signal<string | null>(null);
+
+  // Gmail
+  readonly gmailConfig = signal<GmailConfig | null>(null);
+  readonly gmailAllowList = signal<GmailAllowListEntry[]>([]);
+  readonly gmailHealth = signal<GmailHealth | null>(null);
+  readonly gmailConnecting = signal(false);
+  readonly gmailConnectError = signal<string | null>(null);
+  readonly allowListError = signal<string | null>(null);
+  newAllowPattern = '';
+  newAllowLabel = '';
+  private readonly queryParams = toSignal(this.route.queryParams);
 
   readonly roomTypeEntries = Object.entries(ROOM_TYPE_GROUP_LABELS).map(([key, label]) => ({
     key,
@@ -402,6 +645,17 @@ export class SettingsPage {
     this.loadSettings();
     this.loadCategories();
     this.loadInspectionTags();
+    this.loadGmailConfig();
+    this.loadGmailAllowList();
+    this.loadGmailHealth();
+
+    // Handle OAuth callback: Google redirects back with ?code=...&state=gmail_oauth
+    effect(() => {
+      const params = this.queryParams();
+      if (params?.['code'] && params?.['state'] === 'gmail_oauth') {
+        this.exchangeGmailCode(params['code']);
+      }
+    });
   }
 
   private loadSettings(): void {
@@ -510,6 +764,96 @@ export class SettingsPage {
   disableInspectionTag(roomType: string, tag: InspectionTag): void {
     this.settingsService.disableInspectionTag(tag.id).subscribe({
       next: () => this.loadInspectionTags(),
+    });
+  }
+
+  // ── Gmail ──────────────────────────────────────────────────────────────────
+
+  private loadGmailConfig(): void {
+    this.settingsService.getGmailConfig().subscribe({
+      next: (cfg) => this.gmailConfig.set(cfg),
+    });
+  }
+
+  private loadGmailAllowList(): void {
+    this.settingsService.getGmailAllowList().subscribe({
+      next: (list) => this.gmailAllowList.set(list),
+    });
+  }
+
+  private loadGmailHealth(): void {
+    this.settingsService.getGmailHealth().subscribe({
+      next: (h) => this.gmailHealth.set(h),
+    });
+  }
+
+  connectGmail(): void {
+    this.gmailConnecting.set(true);
+    this.gmailConnectError.set(null);
+    const redirectUri = `${window.location.origin}/settings`;
+    this.settingsService.getGmailAuthUrl(redirectUri).subscribe({
+      next: (url) => {
+        window.location.href = url;
+      },
+      error: (err) => {
+        this.gmailConnecting.set(false);
+        this.gmailConnectError.set(err?.message ?? 'Failed to start Gmail connection.');
+      },
+    });
+  }
+
+  private exchangeGmailCode(code: string): void {
+    this.gmailConnecting.set(true);
+    this.gmailConnectError.set(null);
+    const redirectUri = `${window.location.origin}/settings`;
+    this.settingsService.exchangeGmailCode(code, redirectUri).subscribe({
+      next: () => {
+        this.gmailConnecting.set(false);
+        this.router.navigate([], { queryParams: {}, replaceUrl: true });
+        this.loadGmailConfig();
+        this.loadGmailHealth();
+      },
+      error: (err) => {
+        this.gmailConnecting.set(false);
+        this.gmailConnectError.set(err?.message ?? 'Failed to complete Gmail authentication.');
+        this.router.navigate([], { queryParams: {}, replaceUrl: true });
+      },
+    });
+  }
+
+  disconnectGmail(): void {
+    this.settingsService.disconnectGmail().subscribe({
+      next: () => this.loadGmailConfig(),
+    });
+  }
+
+  addAllowEntry(): void {
+    const pattern = this.newAllowPattern.trim();
+    const label = this.newAllowLabel.trim();
+    if (!pattern || !label) {
+      this.allowListError.set('Both pattern and label are required.');
+      return;
+    }
+    this.allowListError.set(null);
+    this.settingsService.addGmailAllowListEntry(pattern, label).subscribe({
+      next: () => {
+        this.newAllowPattern = '';
+        this.newAllowLabel = '';
+        this.loadGmailAllowList();
+      },
+      error: (err) => this.allowListError.set(err?.message ?? 'Failed to add entry.'),
+    });
+  }
+
+  toggleAllowEntry(entry: GmailAllowListEntry): void {
+    this.settingsService.toggleGmailAllowListEntry(entry.id, !entry.is_active).subscribe({
+      next: () => this.loadGmailAllowList(),
+    });
+  }
+
+  deleteAllowEntry(id: string): void {
+    this.settingsService.deleteGmailAllowListEntry(id).subscribe({
+      next: () => this.loadGmailAllowList(),
     });
   }
 }

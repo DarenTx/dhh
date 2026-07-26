@@ -29,6 +29,28 @@ export interface InspectionTag {
   created_at: string;
 }
 
+export interface GmailConfig {
+  auth_status: 'connected' | 'reauth_required' | 'disconnected';
+  owner_user_id: string | null;
+  connected_at: string | null;
+  last_token_refresh_at: string | null;
+}
+
+export interface GmailAllowListEntry {
+  id: string;
+  pattern: string;
+  label: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface GmailHealth {
+  error_count_7d: number;
+  last_error_detail: string | null;
+  last_processed_at: string | null;
+  permanently_failed_count: number;
+}
+
 @Injectable({ providedIn: 'root' })
 export class SettingsService {
   private readonly supabase = inject<SupabaseClient>(SUPABASE_CLIENT);
@@ -145,6 +167,140 @@ export class SettingsService {
         .from('inspection_tags')
         .update({ is_active: false })
         .eq('id', id)
+        .then(({ error }) => {
+          if (error) throw error;
+        }),
+    );
+  }
+
+  // ── Gmail ──────────────────────────────────────────────────────────────────
+
+  getGmailConfig(): Observable<GmailConfig> {
+    return from(
+      this.supabase
+        .from('gmail_config')
+        .select('auth_status, owner_user_id, connected_at, last_token_refresh_at')
+        .eq('id', 1)
+        .single()
+        .then(({ data, error }) => {
+          if (error) throw error;
+          return data as GmailConfig;
+        }),
+    );
+  }
+
+  getGmailAllowList(): Observable<GmailAllowListEntry[]> {
+    return from(
+      this.supabase
+        .from('gmail_allow_list')
+        .select('id, pattern, label, is_active, created_at')
+        .order('created_at')
+        .then(({ data, error }) => {
+          if (error) throw error;
+          return (data ?? []) as GmailAllowListEntry[];
+        }),
+    );
+  }
+
+  addGmailAllowListEntry(pattern: string, label: string): Observable<void> {
+    return from(
+      this.supabase
+        .from('gmail_allow_list')
+        .insert({ pattern, label })
+        .then(({ error }) => {
+          if (error) throw error;
+        }),
+    );
+  }
+
+  toggleGmailAllowListEntry(id: string, isActive: boolean): Observable<void> {
+    return from(
+      this.supabase
+        .from('gmail_allow_list')
+        .update({ is_active: isActive })
+        .eq('id', id)
+        .then(({ error }) => {
+          if (error) throw error;
+        }),
+    );
+  }
+
+  deleteGmailAllowListEntry(id: string): Observable<void> {
+    return from(
+      this.supabase
+        .from('gmail_allow_list')
+        .delete()
+        .eq('id', id)
+        .then(({ error }) => {
+          if (error) throw error;
+        }),
+    );
+  }
+
+  getGmailHealth(): Observable<GmailHealth> {
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    return from(
+      Promise.all([
+        this.supabase
+          .from('gmail_processed_messages')
+          .select('id', { count: 'exact', head: true })
+          .eq('status', 'error')
+          .gte('last_error_at', sevenDaysAgo),
+        this.supabase
+          .from('gmail_processed_messages')
+          .select('error_detail')
+          .in('status', ['error', 'permanently_failed'])
+          .order('last_error_at', { ascending: false })
+          .limit(1),
+        this.supabase
+          .from('gmail_processed_messages')
+          .select('processed_at')
+          .eq('status', 'completed')
+          .order('processed_at', { ascending: false })
+          .limit(1),
+        this.supabase
+          .from('gmail_processed_messages')
+          .select('id', { count: 'exact', head: true })
+          .eq('status', 'permanently_failed'),
+      ]).then(([errorCount, lastError, lastSuccess, permFailed]) => ({
+        error_count_7d: errorCount.count ?? 0,
+        last_error_detail:
+          (lastError.data as { error_detail: string | null }[] | null)?.[0]?.error_detail ?? null,
+        last_processed_at:
+          (lastSuccess.data as { processed_at: string }[] | null)?.[0]?.processed_at ?? null,
+        permanently_failed_count: permFailed.count ?? 0,
+      })),
+    );
+  }
+
+  getGmailAuthUrl(redirectUri: string): Observable<string> {
+    return from(
+      this.supabase.functions
+        .invoke('gmail-oauth', { body: { action: 'get_auth_url', redirect_uri: redirectUri } })
+        .then(({ data, error }) => {
+          if (error) throw error;
+          return (data as { url: string }).url;
+        }),
+    );
+  }
+
+  exchangeGmailCode(code: string, redirectUri: string): Observable<{ watch_configured: boolean }> {
+    return from(
+      this.supabase.functions
+        .invoke('gmail-oauth', {
+          body: { action: 'exchange_code', code, redirect_uri: redirectUri },
+        })
+        .then(({ data, error }) => {
+          if (error) throw error;
+          return data as { watch_configured: boolean };
+        }),
+    );
+  }
+
+  disconnectGmail(): Observable<void> {
+    return from(
+      this.supabase.functions
+        .invoke('gmail-oauth', { body: { action: 'disconnect' } })
         .then(({ error }) => {
           if (error) throw error;
         }),
