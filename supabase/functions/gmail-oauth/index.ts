@@ -265,15 +265,16 @@ Deno.serve(async (req: Request) => {
       .from('gmail_processed_messages')
       .upsert(rows, { onConflict: 'message_id', ignoreDuplicates: false });
 
-    // Invoke process-gmail using service role key (reliable internal auth)
-    await fetch(`${SUPABASE_URL}/functions/v1/process-gmail`, {
+    // Fire-and-forget: do NOT await — process-gmail can take 60-150s and
+    // waiting for it would cause gmail-oauth to timeout (546).
+    fetch(`${SUPABASE_URL}/functions/v1/process-gmail`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({}),
-    });
+    }).catch((e) => console.error('Failed to invoke process-gmail:', e));
 
     // Also return how many are still pending so the UI can auto-drain
     const { count: remaining } = await adminClient
@@ -301,14 +302,15 @@ Deno.serve(async (req: Request) => {
 
     const remaining = count ?? 0;
     if (remaining > 0) {
-      await fetch(`${SUPABASE_URL}/functions/v1/process-gmail`, {
+      // Fire-and-forget — do NOT await, same reason as backfill
+      fetch(`${SUPABASE_URL}/functions/v1/process-gmail`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
           'Content-Type': 'application/json',
         },
         body: '{}',
-      });
+      }).catch((e) => console.error('Failed to invoke process-gmail:', e));
     }
     return jsonResponse({ remaining });
   }
