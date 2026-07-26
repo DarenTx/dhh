@@ -491,9 +491,17 @@ const ROOM_TYPE_GROUP_LABELS: Record<string, string> = {
           <div class="gmail-actions">
             @if (cfg.auth_status === 'connected') {
               <button
+                class="btn btn-primary"
+                (click)="backfillGmail()"
+                [disabled]="gmailConnecting() || gmailBackfilling()"
+              >
+                <ng-icon name="heroArrowDownTray" size="16" />
+                {{ gmailBackfilling() ? 'Processing…' : 'Process Historical Emails' }}
+              </button>
+              <button
                 class="btn btn-danger"
                 (click)="disconnectGmail()"
-                [disabled]="gmailConnecting()"
+                [disabled]="gmailConnecting() || gmailBackfilling()"
               >
                 Disconnect Gmail
               </button>
@@ -512,6 +520,9 @@ const ROOM_TYPE_GROUP_LABELS: Record<string, string> = {
           </div>
         } @else {
           <p style="color:#718096;">Loading…</p>
+        }
+        @if (gmailBackfillResult()) {
+          <p class="success-msg">{{ gmailBackfillResult() }}</p>
         }
         @if (gmailConnectError()) {
           <p class="error-msg">{{ gmailConnectError() }}</p>
@@ -623,6 +634,8 @@ export class SettingsPage {
   readonly gmailAllowList = signal<GmailAllowListEntry[]>([]);
   readonly gmailHealth = signal<GmailHealth | null>(null);
   readonly gmailConnecting = signal(false);
+  readonly gmailBackfilling = signal(false);
+  readonly gmailBackfillResult = signal<string | null>(null);
   readonly gmailConnectError = signal<string | null>(null);
   readonly allowListError = signal<string | null>(null);
   newAllowPattern = '';
@@ -824,6 +837,29 @@ export class SettingsPage {
   disconnectGmail(): void {
     this.settingsService.disconnectGmail().subscribe({
       next: () => this.loadGmailConfig(),
+    });
+  }
+
+  backfillGmail(): void {
+    this.gmailBackfilling.set(true);
+    this.gmailBackfillResult.set(null);
+    this.gmailConnectError.set(null);
+    this.settingsService.backfillGmail().subscribe({
+      next: (result) => {
+        this.gmailBackfilling.set(false);
+        if (result.message) {
+          this.gmailBackfillResult.set(result.message);
+        } else {
+          this.gmailBackfillResult.set(
+            `Found ${result.total_found} emails — queued ${result.queued} for processing.`,
+          );
+        }
+        this.loadGmailHealth();
+      },
+      error: (err) => {
+        this.gmailBackfilling.set(false);
+        this.gmailConnectError.set(err?.message ?? 'Backfill failed.');
+      },
     });
   }
 

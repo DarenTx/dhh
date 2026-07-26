@@ -17,7 +17,10 @@ Deno.serve(async (req: Request) => {
   const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
   if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
-    return errorResponse(500, 'Missing Google OAuth configuration (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET)');
+    return errorResponse(
+      500,
+      'Missing Google OAuth configuration (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET)',
+    );
   }
 
   const authHeader = req.headers.get('Authorization');
@@ -27,7 +30,10 @@ Deno.serve(async (req: Request) => {
     global: { headers: { Authorization: authHeader } },
   });
 
-  const { data: { user }, error: userError } = await callerClient.auth.getUser();
+  const {
+    data: { user },
+    error: userError,
+  } = await callerClient.auth.getUser();
   if (userError || !user) return errorResponse(401, 'Invalid token');
 
   const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
@@ -88,7 +94,7 @@ Deno.serve(async (req: Request) => {
       return errorResponse(400, 'Failed to exchange authorization code');
     }
 
-    const tokens = await tokenRes.json() as {
+    const tokens = (await tokenRes.json()) as {
       access_token?: string;
       refresh_token?: string;
       error?: string;
@@ -96,7 +102,10 @@ Deno.serve(async (req: Request) => {
     };
 
     if (tokens.error || !tokens.refresh_token || !tokens.access_token) {
-      return errorResponse(400, tokens.error_description ?? tokens.error ?? 'No refresh token returned.');
+      return errorResponse(
+        400,
+        tokens.error_description ?? tokens.error ?? 'No refresh token returned.',
+      );
     }
 
     const { error: vaultError } = await adminClient.rpc('upsert_gmail_refresh_token', {
@@ -118,7 +127,7 @@ Deno.serve(async (req: Request) => {
         body: JSON.stringify({ labelIds: ['INBOX'], topicName: GMAIL_PUBSUB_TOPIC }),
       });
       if (watchRes.ok) {
-        const watchData = await watchRes.json() as { historyId: string };
+        const watchData = (await watchRes.json()) as { historyId: string };
         initialHistoryId = watchData.historyId;
       } else {
         console.warn('Gmail watch() setup failed:', await watchRes.text());
@@ -152,6 +161,122 @@ Deno.serve(async (req: Request) => {
       .update({ auth_status: 'disconnected', last_history_id: null })
       .eq('id', 1);
     return jsonResponse({ success: true });
+  }
+
+  // -- Action: backfill ------------------------------------------------------
+  // Fetches all historical messages matching the allow list, queues them for
+  // processing, then invokes process-gmail to drain the queue.
+  if (body.action === 'backfill') {
+    const { data: config } = await adminClient
+      .from('gmail_config')
+      .select('auth_status')
+      .eq('id', 1)
+      .single();
+
+    if (!config || config.auth_status !== 'connected') {
+      return errorResponse(400, 'Gmail is not connected');
+    }
+
+    const { data: refreshToken } = await adminClient.rpc('get_gmail_refresh_token');
+    if (!refreshToken) {
+      return errorResponse(400, 'No refresh token stored — reconnect Gmail first');
+    }
+
+    // Exchange refresh token for access token
+    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: GOOGLE_CLIENT_ID,
+        client_secret: GOOGLE_CLIENT_SECRET,
+        refresh_token: refreshToken,
+        grant_type: 'refresh_token',
+      }),
+    });
+    if (!tokenRes.ok) return errorResponse(500, 'Failed to refresh access token');
+    const tokenData = (await tokenRes.json()) as { access_token?: string };
+    const accessToken = tokenData.access_token;
+    if (!accessToken) return errorResponse(500, 'No access token returned');
+
+    // Build Gmail search query from active allow list patterns
+    const { data: allowList } = await adminClient
+      .from('gmail_allow_list')
+      .select('pattern')
+      .eq('is_active', true);
+
+    if (!allowList?.length) {
+      return errorResponse(400, 'Allow list is empty — add entries first');
+    }
+
+    const gmailQuery = allowList.map((e: { pattern: string }) => `from:${e.pattern}`).join(' OR ');
+
+    // Fetch all matching message IDs (paginated, up to 500)
+    const allMessageIds: string[] = [];
+    let pageToken: string | undefined;
+    do {
+      const url = new URL('https://gmail.googleapis.com/gmail/v1/users/me/messages');
+      url.searchParams.set('q', gmailQuery);
+      url.searchParams.set('maxResults', '100');
+      if (pageToken) url.searchParams.set('pageToken', pageToken);
+
+      const listRes = await fetch(url.toString(), {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!listRes.ok) break;
+
+      const listData = (await listRes.json()) as {
+        messages?: { id: string }[];
+        nextPageToken?: string;
+      };
+      for (const m of listData.messages ?? []) allMessageIds.push(m.id);
+      pageToken = listData.nextPageToken;
+    } while (pageToken && allMessageIds.length < 500);
+
+    if (!allMessageIds.length) {
+      return jsonResponse({ queued: 0, message: 'No matching messages found in Gmail' });
+    }
+
+    // Find which message IDs already have a terminal status (skip those)
+    const TERMINAL = ['completed', 'skipped_no_match', 'skipped_not_allowed', 'permanently_failed'];
+    const { data: existing } = await adminClient
+      .from('gmail_processed_messages')
+      .select('message_id, status')
+      .in('message_id', allMessageIds);
+
+    const terminalIds = new Set(
+      (existing ?? [])
+        .filter((r: { status: string }) => TERMINAL.includes(r.status))
+        .map((r: { message_id: string }) => r.message_id),
+    );
+    const toQueue = allMessageIds.filter((id) => !terminalIds.has(id));
+
+    if (!toQueue.length) {
+      return jsonResponse({ queued: 0, message: 'All matching messages already processed' });
+    }
+
+    // Upsert as 'error' status so the retry queue in process-gmail picks them up
+    const rows = toQueue.map((message_id) => ({
+      message_id,
+      status: 'error',
+      error_detail: 'backfill',
+      retry_count: 0,
+    }));
+    await adminClient
+      .from('gmail_processed_messages')
+      .upsert(rows, { onConflict: 'message_id', ignoreDuplicates: false });
+
+    // Invoke process-gmail to drain the queue immediately
+    const WEBHOOK_SECRET = Deno.env.get('GMAIL_WEBHOOK_SECRET') ?? '';
+    await fetch(`${SUPABASE_URL}/functions/v1/process-gmail`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${WEBHOOK_SECRET}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({}),
+    });
+
+    return jsonResponse({ queued: toQueue.length, total_found: allMessageIds.length });
   }
 
   return errorResponse(400, `Unknown action: ${body.action}`);

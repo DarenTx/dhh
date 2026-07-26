@@ -32,6 +32,7 @@ import {
   heroTrash,
   heroCheck,
   heroStar,
+  heroArrowPath,
   heroFlag,
 } from '@ng-icons/heroicons/outline';
 
@@ -76,6 +77,7 @@ export const appConfig: ApplicationConfig = {
       heroCheck,
       heroStar,
       heroFlag,
+      heroArrowPath,
     }),
     provideServiceWorker('ngsw-worker.js', {
       enabled: !isDevMode(),
