@@ -311,19 +311,12 @@ async function processAttachment(
   const attachData = (await attachRes.json()) as { data?: string };
   if (!attachData.data) return null;
 
+  // Convert URL-safe base64 to standard base64 (string op only — no decoding yet)
   const base64Standard = attachData.data.replace(/-/g, '+').replace(/_/g, '/');
-  const uint8 = Uint8Array.from(atob(base64Standard), (c) => c.charCodeAt(0));
   const safeName = (part.filename ?? 'attachment').replace(/[^a-zA-Z0-9._-]/g, '_');
-  const tempPath = `gmail-temp/${msgId}/${safeName}`;
 
-  const { error: uploadError } = await adminClient.storage
-    .from('documents')
-    .upload(tempPath, uint8, { contentType: part.mimeType, upsert: true });
-  if (uploadError) {
-    console.error('Temp upload failed:', uploadError);
-    return null;
-  }
-
+  // Classify with Gemini FIRST — only decode+upload if we have a confirmed match.
+  // This avoids crashing on large files when there's no property match (the common case).
   const result = await classifyFile(
     base64Standard,
     part.mimeType,
@@ -332,16 +325,25 @@ async function processAttachment(
     GEMINI_MODEL,
   );
   if (!result || result.confidence < CONFIDENCE_THRESHOLD || !result.property_id) {
-    await adminClient.storage.from('documents').remove([tempPath]);
     return null;
   }
 
+  // Confirmed match — decode binary and upload directly to final path.
+  // Buffer.from() is a native operation; avoids the character-by-character loop
+  // that crashes the Deno runtime on large files.
+  const padded = base64Standard + '='.repeat((4 - (base64Standard.length % 4)) % 4);
+  // deno-lint-ignore no-explicit-any
+  const uint8 = (globalThis as any).Buffer
+    ? // deno-lint-ignore no-explicit-any
+      new Uint8Array((globalThis as any).Buffer.from(padded, 'base64').buffer)
+    : Uint8Array.from(atob(padded), (c) => c.charCodeAt(0));
+
   const finalPath = `${result.property_id}/${msgId}-${safeName}`;
-  const { error: moveError } = await adminClient.storage
+  const { error: uploadError } = await adminClient.storage
     .from('documents')
-    .move(tempPath, finalPath);
-  if (moveError) {
-    await adminClient.storage.from('documents').remove([tempPath]);
+    .upload(finalPath, uint8, { contentType: part.mimeType, upsert: true });
+  if (uploadError) {
+    console.error('Upload failed:', uploadError);
     return null;
   }
 
