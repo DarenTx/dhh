@@ -188,6 +188,26 @@ Deno.serve(async (req: Request) => {
     }
   }
 
+  // Self-chain: if there are still messages to process, fire another invocation
+  // so the queue drains without needing the browser to stay open.
+  const { count: remaining } = await adminClient
+    .from('gmail_processed_messages')
+    .select('id', { count: 'exact', head: true })
+    .eq('status', 'error')
+    .lt('retry_count', MAX_RETRY_COUNT);
+
+  if ((remaining ?? 0) > 0) {
+    console.log(`${remaining} messages remaining — firing next batch.`);
+    fetch(`${SUPABASE_URL}/functions/v1/process-gmail`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: '{}',
+    }).catch(() => {});
+  }
+
   return new Response('ok', { status: 200 });
 });
 
@@ -351,13 +371,16 @@ async function processAttachment(
     return null;
   }
 
-  await adminClient.from('documents').insert({
-    title: result.title ?? safeName,
-    description: result.description ?? null,
-    property_id: result.property_id,
-    storage_path: finalPath,
-    uploaded_by: config.owner_user_id,
-  });
+  await adminClient.from('documents').upsert(
+    {
+      title: result.title ?? safeName,
+      description: result.description ?? null,
+      property_id: result.property_id,
+      storage_path: finalPath,
+      uploaded_by: config.owner_user_id,
+    },
+    { onConflict: 'storage_path', ignoreDuplicates: true },
+  );
 
   return result.property_id;
 }
