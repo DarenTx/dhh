@@ -33,12 +33,17 @@ interface AllowListEntry {
 }
 
 Deno.serve(async (req: Request) => {
+  // Accept either GMAIL_WEBHOOK_SECRET (Pub/Sub external calls) or
+  // SUPABASE_SERVICE_ROLE_KEY (internal function-to-function calls)
+  const SUPABASE_SERVICE_ROLE_KEY_CHECK = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
   const WEBHOOK_SECRET = Deno.env.get('GMAIL_WEBHOOK_SECRET');
-  if (WEBHOOK_SECRET) {
-    const authHeader = req.headers.get('Authorization') ?? '';
-    if (authHeader !== `Bearer ${WEBHOOK_SECRET}`) {
-      return new Response('Unauthorized', { status: 401 });
-    }
+  const authHeader = req.headers.get('Authorization') ?? '';
+  const validTokens = [
+    `Bearer ${SUPABASE_SERVICE_ROLE_KEY_CHECK}`,
+    ...(WEBHOOK_SECRET ? [`Bearer ${WEBHOOK_SECRET}`] : []),
+  ];
+  if (!validTokens.includes(authHeader)) {
+    return new Response('Unauthorized', { status: 401 });
   }
 
   const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
@@ -76,7 +81,10 @@ Deno.serve(async (req: Request) => {
     return new Response('ok', { status: 200 });
   }
 
-  await adminClient.from('gmail_config').update({ last_token_refresh_at: new Date().toISOString() }).eq('id', 1);
+  await adminClient
+    .from('gmail_config')
+    .update({ last_token_refresh_at: new Date().toISOString() })
+    .eq('id', 1);
 
   const [allowListResult, propertiesResult, labelsResult] = await Promise.all([
     adminClient.from('gmail_allow_list').select('pattern').eq('is_active', true),
@@ -92,13 +100,15 @@ Deno.serve(async (req: Request) => {
 
   let newHistoryId: string | null = null;
   try {
-    const pubsubBody = await req.json() as { message?: { data?: string } };
+    const pubsubBody = (await req.json()) as { message?: { data?: string } };
     if (pubsubBody.message?.data) {
       const decoded = atob(pubsubBody.message.data.replace(/-/g, '+').replace(/_/g, '/'));
       const notification = JSON.parse(decoded) as { historyId?: string };
       newHistoryId = notification.historyId ?? null;
     }
-  } catch { /* not a Pub/Sub request */ }
+  } catch {
+    /* not a Pub/Sub request */
+  }
 
   const newMessageIds: string[] = [];
 
@@ -110,10 +120,12 @@ Deno.serve(async (req: Request) => {
       url.searchParams.set('historyTypes', 'messageAdded');
       if (pageToken) url.searchParams.set('pageToken', pageToken);
 
-      const histRes = await fetch(url.toString(), { headers: { Authorization: `Bearer ${accessToken}` } });
+      const histRes = await fetch(url.toString(), {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
       if (!histRes.ok) break;
 
-      const histData = await histRes.json() as {
+      const histData = (await histRes.json()) as {
         history?: { messagesAdded?: { message: { id: string } }[] }[];
         nextPageToken?: string;
       };
@@ -142,7 +154,17 @@ Deno.serve(async (req: Request) => {
 
   for (const msgId of allIds) {
     try {
-      await processMessage({ msgId, accessToken, adminClient, allowList, properties, labelCache, config, GEMINI_API_KEY, GEMINI_MODEL });
+      await processMessage({
+        msgId,
+        accessToken,
+        adminClient,
+        allowList,
+        properties,
+        labelCache,
+        config,
+        GEMINI_API_KEY,
+        GEMINI_MODEL,
+      });
     } catch (err) {
       console.error(`Unhandled error for message ${msgId}:`, err);
       failedMessageIds.push(msgId);
@@ -156,7 +178,9 @@ Deno.serve(async (req: Request) => {
       .eq('status', 'permanently_failed')
       .in('message_id', failedMessageIds);
     if ((permFailed ?? []).length > 0) {
-      console.warn(`ALERT: ${permFailed!.length} messages permanently failed. Alert to: ${ALERT_EMAIL}`);
+      console.warn(
+        `ALERT: ${permFailed!.length} messages permanently failed. Alert to: ${ALERT_EMAIL}`,
+      );
     }
   }
 
@@ -178,23 +202,39 @@ interface ProcessCtx {
 async function processMessage(ctx: ProcessCtx): Promise<void> {
   const { msgId, accessToken, adminClient } = ctx;
 
-  await adminClient.from('gmail_processed_messages').upsert(
-    { message_id: msgId, status: 'processing', processed_at: new Date().toISOString() },
-    { onConflict: 'message_id', ignoreDuplicates: false },
-  );
+  await adminClient
+    .from('gmail_processed_messages')
+    .upsert(
+      { message_id: msgId, status: 'processing', processed_at: new Date().toISOString() },
+      { onConflict: 'message_id', ignoreDuplicates: false },
+    );
 
   const { data: existing } = await adminClient
-    .from('gmail_processed_messages').select('status').eq('message_id', msgId).single();
-  if (['completed', 'skipped_no_match', 'skipped_not_allowed', 'permanently_failed'].includes(existing?.status ?? '')) return;
+    .from('gmail_processed_messages')
+    .select('status')
+    .eq('message_id', msgId)
+    .single();
+  if (
+    ['completed', 'skipped_no_match', 'skipped_not_allowed', 'permanently_failed'].includes(
+      existing?.status ?? '',
+    )
+  )
+    return;
 
   const msgRes = await fetch(
     `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msgId}?format=full`,
     { headers: { Authorization: `Bearer ${accessToken}` } },
   );
-  if (!msgRes.ok) { await updateStatus(adminClient, msgId, 'error', 'Failed to fetch message'); return; }
+  if (!msgRes.ok) {
+    await updateStatus(adminClient, msgId, 'error', 'Failed to fetch message');
+    return;
+  }
 
-  const msg = await msgRes.json() as { payload?: GmailPart };
-  if (!msg.payload) { await updateStatus(adminClient, msgId, 'skipped_no_match', null); return; }
+  const msg = (await msgRes.json()) as { payload?: GmailPart };
+  if (!msg.payload) {
+    await updateStatus(adminClient, msgId, 'skipped_no_match', null);
+    return;
+  }
 
   const fromHeader = msg.payload.headers?.find((h) => h.name.toLowerCase() === 'from')?.value ?? '';
   const fromEmail = extractEmail(fromHeader);
@@ -213,29 +253,48 @@ async function processMessage(ctx: ProcessCtx): Promise<void> {
       if (matched) matchedPropertyIds.push(matched);
     }
   } else {
-    const subject = msg.payload.headers?.find((h) => h.name.toLowerCase() === 'subject')?.value ?? '';
+    const subject =
+      msg.payload.headers?.find((h) => h.name.toLowerCase() === 'subject')?.value ?? '';
     const text = `Subject: ${subject}\n\n${textContent.trim().slice(0, MAX_BODY_CHARS)}`;
     if (text.trim()) {
-      const propertyId = await classifyText(text, ctx.properties, ctx.GEMINI_API_KEY, ctx.GEMINI_MODEL);
+      const propertyId = await classifyText(
+        text,
+        ctx.properties,
+        ctx.GEMINI_API_KEY,
+        ctx.GEMINI_MODEL,
+      );
       if (propertyId) matchedPropertyIds.push(propertyId);
     }
   }
 
   for (const propId of matchedPropertyIds) {
     const prop = ctx.properties.find((p) => p.id === propId);
-    if (prop) await ensureAndApplyLabel(msgId, `Properties/${prop.address_line1}`, accessToken, ctx.labelCache);
+    if (prop)
+      await ensureAndApplyLabel(
+        msgId,
+        `Properties/${prop.address_line1}`,
+        accessToken,
+        ctx.labelCache,
+      );
   }
 
   const finalStatus = matchedPropertyIds.length > 0 ? 'completed' : 'skipped_no_match';
-  await adminClient.from('gmail_processed_messages').update({
-    status: finalStatus,
-    matched_property_ids: matchedPropertyIds,
-    processed_at: new Date().toISOString(),
-    error_detail: null,
-  }).eq('message_id', msgId);
+  await adminClient
+    .from('gmail_processed_messages')
+    .update({
+      status: finalStatus,
+      matched_property_ids: matchedPropertyIds,
+      processed_at: new Date().toISOString(),
+      error_detail: null,
+    })
+    .eq('message_id', msgId);
 }
 
-async function processAttachment(part: GmailPart, msgId: string, ctx: ProcessCtx): Promise<string | null> {
+async function processAttachment(
+  part: GmailPart,
+  msgId: string,
+  ctx: ProcessCtx,
+): Promise<string | null> {
   const { accessToken, adminClient, properties, config, GEMINI_API_KEY, GEMINI_MODEL } = ctx;
 
   if (!SUPPORTED_MIME_TYPES.includes(part.mimeType)) return null;
@@ -249,7 +308,7 @@ async function processAttachment(part: GmailPart, msgId: string, ctx: ProcessCtx
   );
   if (!attachRes.ok) return null;
 
-  const attachData = await attachRes.json() as { data?: string };
+  const attachData = (await attachRes.json()) as { data?: string };
   if (!attachData.data) return null;
 
   const base64Standard = attachData.data.replace(/-/g, '+').replace(/_/g, '/');
@@ -258,18 +317,33 @@ async function processAttachment(part: GmailPart, msgId: string, ctx: ProcessCtx
   const tempPath = `gmail-temp/${msgId}/${safeName}`;
 
   const { error: uploadError } = await adminClient.storage
-    .from('documents').upload(tempPath, uint8, { contentType: part.mimeType, upsert: true });
-  if (uploadError) { console.error('Temp upload failed:', uploadError); return null; }
+    .from('documents')
+    .upload(tempPath, uint8, { contentType: part.mimeType, upsert: true });
+  if (uploadError) {
+    console.error('Temp upload failed:', uploadError);
+    return null;
+  }
 
-  const result = await classifyFile(base64Standard, part.mimeType, properties, GEMINI_API_KEY, GEMINI_MODEL);
+  const result = await classifyFile(
+    base64Standard,
+    part.mimeType,
+    properties,
+    GEMINI_API_KEY,
+    GEMINI_MODEL,
+  );
   if (!result || result.confidence < CONFIDENCE_THRESHOLD || !result.property_id) {
     await adminClient.storage.from('documents').remove([tempPath]);
     return null;
   }
 
   const finalPath = `${result.property_id}/${msgId}-${safeName}`;
-  const { error: moveError } = await adminClient.storage.from('documents').move(tempPath, finalPath);
-  if (moveError) { await adminClient.storage.from('documents').remove([tempPath]); return null; }
+  const { error: moveError } = await adminClient.storage
+    .from('documents')
+    .move(tempPath, finalPath);
+  if (moveError) {
+    await adminClient.storage.from('documents').remove([tempPath]);
+    return null;
+  }
 
   await adminClient.from('documents').insert({
     title: result.title ?? safeName,
@@ -286,46 +360,85 @@ function buildPropertyListText(properties: Property[]): string {
   return properties.map((p) => `  - id: ${p.id}, address: "${p.address_line1}"`).join('\n');
 }
 
-async function classifyFile(base64Data: string, mimeType: string, properties: Property[], apiKey: string, model: string) {
+async function classifyFile(
+  base64Data: string,
+  mimeType: string,
+  properties: Property[],
+  apiKey: string,
+  model: string,
+) {
   const prompt = [
     'You are a document classifier for a real estate property management company.',
     'Analyze the attached file and return JSON only — no markdown, no code fences.',
     'Return this exact shape: { "title": string, "description": string, "property_id": string|null, "confidence_by_field": { "title": 0-1, "description": 0-1, "property_id": 0-1 }, "warnings": string[] }',
     'Rules: Choose the property id that best matches any address in the document. Return null if no confident single match. Return null if multiple properties match.',
-    'Available properties:', buildPropertyListText(properties),
+    'Available properties:',
+    buildPropertyListText(properties),
   ].join('\n');
 
-  const raw = await callGemini(JSON.stringify({
-    generationConfig: { responseMimeType: 'application/json', temperature: 0.1 },
-    contents: [{ role: 'user', parts: [{ text: prompt }, { inlineData: { mimeType, data: base64Data } }] }],
-  }), apiKey, model);
+  const raw = await callGemini(
+    JSON.stringify({
+      generationConfig: { responseMimeType: 'application/json', temperature: 0.1 },
+      contents: [
+        { role: 'user', parts: [{ text: prompt }, { inlineData: { mimeType, data: base64Data } }] },
+      ],
+    }),
+    apiKey,
+    model,
+  );
   if (!raw) return null;
 
   try {
-    const p = JSON.parse(raw) as { title?: string; description?: string; property_id?: string | null; confidence_by_field?: Record<string, number> };
-    return { property_id: p.property_id ?? null, title: p.title ?? null, description: p.description ?? null, confidence: p.confidence_by_field?.property_id ?? 0 };
-  } catch { return null; }
+    const p = JSON.parse(raw) as {
+      title?: string;
+      description?: string;
+      property_id?: string | null;
+      confidence_by_field?: Record<string, number>;
+    };
+    return {
+      property_id: p.property_id ?? null,
+      title: p.title ?? null,
+      description: p.description ?? null,
+      confidence: p.confidence_by_field?.property_id ?? 0,
+    };
+  } catch {
+    return null;
+  }
 }
 
-async function classifyText(text: string, properties: Property[], apiKey: string, model: string): Promise<string | null> {
+async function classifyText(
+  text: string,
+  properties: Property[],
+  apiKey: string,
+  model: string,
+): Promise<string | null> {
   const prompt = [
     'You are an email classifier for a real estate property management company.',
     'Analyze the email and return JSON only — no markdown. Shape: { "property_id": string|null, "confidence": number, "reasoning": string }',
     'Return null if no property is clearly referenced or if multiple properties match.',
-    '--- EMAIL ---', text, '--- END EMAIL ---',
-    'Available properties:', buildPropertyListText(properties),
+    '--- EMAIL ---',
+    text,
+    '--- END EMAIL ---',
+    'Available properties:',
+    buildPropertyListText(properties),
   ].join('\n');
 
-  const raw = await callGemini(JSON.stringify({
-    generationConfig: { responseMimeType: 'application/json', temperature: 0.1 },
-    contents: [{ role: 'user', parts: [{ text: prompt }] }],
-  }), apiKey, model);
+  const raw = await callGemini(
+    JSON.stringify({
+      generationConfig: { responseMimeType: 'application/json', temperature: 0.1 },
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    }),
+    apiKey,
+    model,
+  );
   if (!raw) return null;
 
   try {
     const p = JSON.parse(raw) as { property_id?: string | null; confidence?: number };
     return (p.confidence ?? 0) >= CONFIDENCE_THRESHOLD && p.property_id ? p.property_id : null;
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 
 async function callGemini(body: string, apiKey: string, model: string): Promise<string | null> {
@@ -340,24 +453,41 @@ async function callGemini(body: string, apiKey: string, model: string): Promise<
     let waitMs = Math.min(5_000 * 2 ** attempt, 60_000);
     try {
       const rb = await response.clone().json();
-      const d = rb?.error?.details?.find((d: { '@type': string; retryDelay?: string }) => d['@type'] === 'type.googleapis.com/google.rpc.RetryInfo')?.retryDelay?.replace('s', '');
+      const d = rb?.error?.details
+        ?.find(
+          (d: { '@type': string; retryDelay?: string }) =>
+            d['@type'] === 'type.googleapis.com/google.rpc.RetryInfo',
+        )
+        ?.retryDelay?.replace('s', '');
       if (d) waitMs = Math.min(parseFloat(d) * 1_000 + 500, 65_000);
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     await new Promise((r) => setTimeout(r, waitMs));
   }
-  if (!response.ok) { console.error('Gemini error:', response.status); return null; }
+  if (!response.ok) {
+    console.error('Gemini error:', response.status);
+    return null;
+  }
   const json = await response.json();
   return json?.candidates?.[0]?.content?.parts?.[0]?.text ?? null;
 }
 
 async function fetchGmailLabels(accessToken: string): Promise<{ name: string; id: string }[]> {
-  const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/labels', { headers: { Authorization: `Bearer ${accessToken}` } });
+  const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/labels', {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
   if (!res.ok) return [];
-  const data = await res.json() as { labels?: { name: string; id: string }[] };
+  const data = (await res.json()) as { labels?: { name: string; id: string }[] };
   return data.labels ?? [];
 }
 
-async function ensureAndApplyLabel(msgId: string, labelName: string, accessToken: string, cache: Map<string, string>): Promise<void> {
+async function ensureAndApplyLabel(
+  msgId: string,
+  labelName: string,
+  accessToken: string,
+  cache: Map<string, string>,
+): Promise<void> {
   let labelId = cache.get(labelName);
   if (!labelId) {
     const createRes = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/labels', {
@@ -366,10 +496,13 @@ async function ensureAndApplyLabel(msgId: string, labelName: string, accessToken
       body: JSON.stringify({ name: labelName }),
     });
     if (createRes.ok) {
-      const created = await createRes.json() as { id: string; name: string };
+      const created = (await createRes.json()) as { id: string; name: string };
       labelId = created.id;
       cache.set(labelName, labelId);
-    } else { console.warn(`Failed to create label "${labelName}"`); return; }
+    } else {
+      console.warn(`Failed to create label "${labelName}"`);
+      return;
+    }
   }
   await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${msgId}/modify`, {
     method: 'POST',
@@ -382,9 +515,18 @@ function extractParts(payload: GmailPart): { attachments: GmailPart[]; textConte
   const attachments: GmailPart[] = [];
   let textContent = '';
   function walk(part: GmailPart) {
-    if (part.parts?.length) { for (const p of part.parts) walk(p); return; }
-    const disp = part.headers?.find((h) => h.name.toLowerCase() === 'content-disposition')?.value ?? '';
-    if ((disp.toLowerCase().startsWith('attachment') || (!!part.filename && !disp.toLowerCase().startsWith('inline'))) && part.body?.attachmentId && part.filename) {
+    if (part.parts?.length) {
+      for (const p of part.parts) walk(p);
+      return;
+    }
+    const disp =
+      part.headers?.find((h) => h.name.toLowerCase() === 'content-disposition')?.value ?? '';
+    if (
+      (disp.toLowerCase().startsWith('attachment') ||
+        (!!part.filename && !disp.toLowerCase().startsWith('inline'))) &&
+      part.body?.attachmentId &&
+      part.filename
+    ) {
       attachments.push(part);
     } else if (part.mimeType === 'text/plain' && part.body?.data) {
       textContent += atob(part.body.data.replace(/-/g, '+').replace(/_/g, '/'));
@@ -392,7 +534,9 @@ function extractParts(payload: GmailPart): { attachments: GmailPart[]; textConte
   }
   if (!payload.parts && payload.body?.data && payload.mimeType === 'text/plain') {
     textContent = atob(payload.body.data.replace(/-/g, '+').replace(/_/g, '/'));
-  } else { walk(payload); }
+  } else {
+    walk(payload);
+  }
   return { attachments, textContent };
 }
 
@@ -404,20 +548,32 @@ function extractEmail(fromHeader: string): string {
 function matchesAllowList(email: string, allowList: AllowListEntry[]): boolean {
   for (const entry of allowList) {
     const p = entry.pattern.toLowerCase();
-    if (p.includes('@')) { if (email === p) return true; }
-    else { if (email.endsWith(`@${p}`) || email.endsWith(`.${p}`)) return true; }
+    if (p.includes('@')) {
+      if (email === p) return true;
+    } else {
+      if (email.endsWith(`@${p}`) || email.endsWith(`.${p}`)) return true;
+    }
   }
   return false;
 }
 
-async function getAccessToken(clientId: string, clientSecret: string, refreshToken: string): Promise<string | null> {
+async function getAccessToken(
+  clientId: string,
+  clientSecret: string,
+  refreshToken: string,
+): Promise<string | null> {
   const res = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ client_id: clientId, client_secret: clientSecret, refresh_token: refreshToken, grant_type: 'refresh_token' }),
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      refresh_token: refreshToken,
+      grant_type: 'refresh_token',
+    }),
   });
   if (!res.ok) return null;
-  const data = await res.json() as { access_token?: string };
+  const data = (await res.json()) as { access_token?: string };
   return data.access_token ?? null;
 }
 
@@ -431,19 +587,40 @@ async function fetchWithBackoff(url: string, options: RequestInit): Promise<Resp
   return response;
 }
 
-async function updateStatus(adminClient: ReturnType<typeof createClient>, msgId: string, status: string, errorDetail: string | null): Promise<void> {
+async function updateStatus(
+  adminClient: ReturnType<typeof createClient>,
+  msgId: string,
+  status: string,
+  errorDetail: string | null,
+): Promise<void> {
   if (status === 'error') {
-    const { data: existing } = await adminClient.from('gmail_processed_messages').select('retry_count').eq('message_id', msgId).single();
+    const { data: existing } = await adminClient
+      .from('gmail_processed_messages')
+      .select('retry_count')
+      .eq('message_id', msgId)
+      .single();
     const newRetryCount = (existing?.retry_count ?? 0) + 1;
-    await adminClient.from('gmail_processed_messages').update({
-      status: newRetryCount >= MAX_RETRY_COUNT ? 'permanently_failed' : 'error',
-      error_detail: errorDetail, retry_count: newRetryCount, last_error_at: new Date().toISOString(), processed_at: new Date().toISOString(),
-    }).eq('message_id', msgId);
+    await adminClient
+      .from('gmail_processed_messages')
+      .update({
+        status: newRetryCount >= MAX_RETRY_COUNT ? 'permanently_failed' : 'error',
+        error_detail: errorDetail,
+        retry_count: newRetryCount,
+        last_error_at: new Date().toISOString(),
+        processed_at: new Date().toISOString(),
+      })
+      .eq('message_id', msgId);
   } else {
-    await adminClient.from('gmail_processed_messages').update({ status, error_detail: null, processed_at: new Date().toISOString() }).eq('message_id', msgId);
+    await adminClient
+      .from('gmail_processed_messages')
+      .update({ status, error_detail: null, processed_at: new Date().toISOString() })
+      .eq('message_id', msgId);
   }
 }
 
-async function setAuthStatus(adminClient: ReturnType<typeof createClient>, status: string): Promise<void> {
+async function setAuthStatus(
+  adminClient: ReturnType<typeof createClient>,
+  status: string,
+): Promise<void> {
   await adminClient.from('gmail_config').update({ auth_status: status }).eq('id', 1);
 }

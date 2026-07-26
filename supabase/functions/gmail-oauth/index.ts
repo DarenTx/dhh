@@ -265,12 +265,11 @@ Deno.serve(async (req: Request) => {
       .from('gmail_processed_messages')
       .upsert(rows, { onConflict: 'message_id', ignoreDuplicates: false });
 
-    // Invoke process-gmail to drain the queue immediately
-    const WEBHOOK_SECRET = Deno.env.get('GMAIL_WEBHOOK_SECRET') ?? '';
+    // Invoke process-gmail using service role key (reliable internal auth)
     await fetch(`${SUPABASE_URL}/functions/v1/process-gmail`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${WEBHOOK_SECRET}`,
+        Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({}),
