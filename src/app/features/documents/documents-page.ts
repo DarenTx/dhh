@@ -289,6 +289,9 @@ import { DocumentEditModalComponent } from './document-edit-modal/document-edit-
                   <td>{{ doc.created_at | date: 'MMM d, y' }}</td>
                   <td>
                     <div class="row-actions">
+                      <button class="btn-icon btn-icon-primary" title="View" (click)="onView(doc)">
+                        <ng-icon name="heroEye" size="16" />
+                      </button>
                       <button
                         class="btn-icon btn-icon-primary"
                         title="Download"
@@ -391,9 +394,16 @@ export class DocumentsPage implements OnInit {
     });
   }
 
+  onView(doc: DocumentWithProperty): void {
+    this.storageService.getSignedUrl(doc.storage_path).subscribe({
+      next: (url) => window.open(url, '_blank', 'noopener,noreferrer'),
+      error: () => alert('Could not open document. Please try again.'),
+    });
+  }
+
   onDownload(doc: DocumentWithProperty): void {
     this.storageService.getSignedUrl(doc.storage_path).subscribe({
-      next: (url) => window.open(url, '_blank'),
+      next: (url) => window.open(url, '_blank', 'noopener,noreferrer'),
       error: () => alert('Could not generate download link. Please try again.'),
     });
   }
