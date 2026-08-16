@@ -22,7 +22,7 @@ export class StorageService {
       return from(
         this.supabase.storage
           .from('lease-documents')
-          .upload(existingPath, file, { upsert: true })
+          .upload(existingPath, file, { upsert: true, contentType: 'application/pdf' })
           .then(({ data, error }) => {
             if (error) throw error;
             return data!.path;
@@ -38,7 +38,7 @@ export class StorageService {
     return from(
       this.supabase.storage
         .from('lease-documents')
-        .upload(path, file, { upsert: !!leaseId })
+        .upload(path, file, { upsert: !!leaseId, contentType: 'application/pdf' })
         .then(({ data, error }) => {
           if (error) throw error;
           return data!.path;

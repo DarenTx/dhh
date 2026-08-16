@@ -289,6 +289,16 @@ export class LeaseFormComponent implements OnInit {
       return;
     }
 
+    if (file && file.size === 0) {
+      this.selectedDocument = null;
+      this.selectedDocumentName.set(null);
+      this.serverError.set(
+        `"${file.name}" has no content. On iPhone, open the file in the Files app to download it from iCloud first, then try again.`,
+      );
+      input.value = '';
+      return;
+    }
+
     this.serverError.set(null);
     this.selectedDocument = file;
     this.selectedDocumentName.set(file?.name ?? null);

@@ -882,6 +882,14 @@ export class NewTenancyWizardComponent implements OnInit {
       this.leaseExtractionError.set('Only PDF files are supported for lease extraction.');
       return;
     }
+    if (file.size === 0) {
+      this.selectedLeaseDocument.set(null);
+      this.selectedLeaseDocumentName.set(null);
+      this.leaseExtractionError.set(
+        `"${file.name}" has no content. On iPhone, open the file in the Files app to download it from iCloud first, then try again.`,
+      );
+      return;
+    }
     this.selectedLeaseDocument.set(file);
     this.selectedLeaseDocumentName.set(file.name);
     this.leaseDocumentPath.set(null);
@@ -1054,29 +1062,89 @@ function isPdfFile(file: File): boolean {
 }
 
 const ADDRESS_STATE_ABBREVIATIONS: Record<string, string> = {
-  al: 'alabama', ak: 'alaska', az: 'arizona', ar: 'arkansas',
-  ca: 'california', co: 'colorado', de: 'delaware',
-  fl: 'florida', ga: 'georgia', hi: 'hawaii', id: 'idaho',
-  il: 'illinois', in: 'indiana', ia: 'iowa', ks: 'kansas',
-  ky: 'kentucky', la: 'louisiana', me: 'maine', md: 'maryland',
-  ma: 'massachusetts', mi: 'michigan', mn: 'minnesota', ms: 'mississippi',
-  mo: 'missouri', mt: 'montana', ne: 'nebraska', nv: 'nevada',
-  nh: 'newhampshire', nj: 'newjersey', nm: 'newmexico', ny: 'newyork',
-  nc: 'northcarolina', nd: 'northdakota', oh: 'ohio', ok: 'oklahoma',
-  or: 'oregon', pa: 'pennsylvania', ri: 'rhodeisland', sc: 'southcarolina',
-  sd: 'southdakota', tn: 'tennessee', tx: 'texas', ut: 'utah',
-  vt: 'vermont', va: 'virginia', wa: 'washington', wv: 'westvirginia',
-  wi: 'wisconsin', wy: 'wyoming', dc: 'districtofcolumbia',
+  al: 'alabama',
+  ak: 'alaska',
+  az: 'arizona',
+  ar: 'arkansas',
+  ca: 'california',
+  co: 'colorado',
+  de: 'delaware',
+  fl: 'florida',
+  ga: 'georgia',
+  hi: 'hawaii',
+  id: 'idaho',
+  il: 'illinois',
+  in: 'indiana',
+  ia: 'iowa',
+  ks: 'kansas',
+  ky: 'kentucky',
+  la: 'louisiana',
+  me: 'maine',
+  md: 'maryland',
+  ma: 'massachusetts',
+  mi: 'michigan',
+  mn: 'minnesota',
+  ms: 'mississippi',
+  mo: 'missouri',
+  mt: 'montana',
+  ne: 'nebraska',
+  nv: 'nevada',
+  nh: 'newhampshire',
+  nj: 'newjersey',
+  nm: 'newmexico',
+  ny: 'newyork',
+  nc: 'northcarolina',
+  nd: 'northdakota',
+  oh: 'ohio',
+  ok: 'oklahoma',
+  or: 'oregon',
+  pa: 'pennsylvania',
+  ri: 'rhodeisland',
+  sc: 'southcarolina',
+  sd: 'southdakota',
+  tn: 'tennessee',
+  tx: 'texas',
+  ut: 'utah',
+  vt: 'vermont',
+  va: 'virginia',
+  wa: 'washington',
+  wv: 'westvirginia',
+  wi: 'wisconsin',
+  wy: 'wyoming',
+  dc: 'districtofcolumbia',
 };
 
 // Street type words to remove — avoids false mismatches when one address
 // includes a suffix (e.g. "Avenue") that the stored address omits.
 // Excludes ambiguous abbreviations like "st" (Saint) and "ct" (Connecticut).
 const ADDRESS_STREET_TYPES = new Set([
-  'avenue', 'ave', 'boulevard', 'blvd', 'circle', 'cir', 'court',
-  'drive', 'dr', 'highway', 'hwy', 'lane', 'ln', 'parkway', 'pkwy',
-  'place', 'pl', 'road', 'rd', 'square', 'sq', 'street',
-  'terrace', 'ter', 'trail', 'trl', 'way',
+  'avenue',
+  'ave',
+  'boulevard',
+  'blvd',
+  'circle',
+  'cir',
+  'court',
+  'drive',
+  'dr',
+  'highway',
+  'hwy',
+  'lane',
+  'ln',
+  'parkway',
+  'pkwy',
+  'place',
+  'pl',
+  'road',
+  'rd',
+  'square',
+  'sq',
+  'street',
+  'terrace',
+  'ter',
+  'trail',
+  'trl',
+  'way',
 ]);
 
 function normalizeAddressTokens(value: string): string[] {

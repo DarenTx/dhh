@@ -10,11 +10,12 @@ export class DocumentStorageService {
 
   uploadDraft(file: File): Observable<string> {
     const ext = file.name.includes('.') ? file.name.split('.').pop()! : 'bin';
+    const contentType = file.type || mimeFromExt(ext);
     const storagePath = `drafts/${crypto.randomUUID()}.${ext}`;
     return from(
       this.supabase.storage
         .from(this.bucket)
-        .upload(storagePath, file, { contentType: file.type })
+        .upload(storagePath, file, { contentType })
         .then(({ data, error }) => {
           if (error) throw error;
           return data!.path;
@@ -60,4 +61,17 @@ export class DocumentStorageService {
         }),
     );
   }
+}
+
+function mimeFromExt(ext: string): string {
+  const map: Record<string, string> = {
+    pdf: 'application/pdf',
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    png: 'image/png',
+    gif: 'image/gif',
+    webp: 'image/webp',
+    heic: 'image/heic',
+  };
+  return map[ext.toLowerCase()] ?? 'application/octet-stream';
 }

@@ -787,7 +787,16 @@ export class ExpenseFormComponent implements OnInit {
   onFileSelected(event: Event): void {
     const input = event.target as HTMLInputElement;
     if (!input.files) return;
-    this.pendingFiles.update((prev) => [...prev, ...Array.from(input.files!)]);
+    const files = Array.from(input.files);
+    const empty = files.find((f) => f.size === 0);
+    if (empty) {
+      this.uploadStepError.set(
+        `"${empty.name}" has no content. On iPhone, open the file in the Files app to download it from iCloud first, then try again.`,
+      );
+      input.value = '';
+      return;
+    }
+    this.pendingFiles.update((prev) => [...prev, ...files]);
     this.extractionError.set(null);
     this.extractionWarnings.set([]);
     input.value = '';
@@ -808,7 +817,15 @@ export class ExpenseFormComponent implements OnInit {
     this.dragover.set(false);
     const files = event.dataTransfer?.files;
     if (files?.length) {
-      this.pendingFiles.update((prev) => [...prev, ...Array.from(files)]);
+      const arr = Array.from(files);
+      const empty = arr.find((f) => f.size === 0);
+      if (empty) {
+        this.uploadStepError.set(
+          `"${empty.name}" has no content. On iPhone, open the file in the Files app to download it from iCloud first, then try again.`,
+        );
+        return;
+      }
+      this.pendingFiles.update((prev) => [...prev, ...arr]);
       this.extractionError.set(null);
       this.extractionWarnings.set([]);
     }

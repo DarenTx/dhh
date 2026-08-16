@@ -408,14 +408,30 @@ export class DocumentUploadWizardComponent implements OnInit {
   private setFiles(files: File[]): void {
     if (!files.length) return;
     const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/gif'];
-    const invalid = files.find((f) => !allowedTypes.includes(f.type));
+    const allowedExts = new Set(['pdf', 'jpg', 'jpeg', 'png', 'gif']);
+    // iOS Files picker sometimes omits MIME type; fall back to extension
+    const invalid = files.find((f) =>
+      f.type
+        ? !allowedTypes.includes(f.type)
+        : !allowedExts.has(f.name.split('.').pop()?.toLowerCase() ?? ''),
+    );
     if (invalid) {
       this.stepError.set(
         `"${invalid.name}" is not an accepted file type. Only PDF, PNG, JPG, and GIF are allowed.`,
       );
       return;
     }
-    const hasPdf = files.some((f) => f.type === 'application/pdf');
+    // iCloud-backed files that haven't been downloaded to the device have size 0
+    const empty = files.find((f) => f.size === 0);
+    if (empty) {
+      this.stepError.set(
+        `"${empty.name}" has no content. On iPhone, open the file in the Files app to download it from iCloud first, then try again.`,
+      );
+      return;
+    }
+    const hasPdf = files.some(
+      (f) => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'),
+    );
     if (hasPdf && files.length > 1) {
       this.stepError.set('PDF documents must be uploaded one at a time.');
       return;
