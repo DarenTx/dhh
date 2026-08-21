@@ -101,6 +101,45 @@ import {
       border-radius: 0.75rem;
       margin-bottom: 1rem;
       background: #edf2f7;
+      cursor: pointer;
+    }
+
+    .lightbox-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.92);
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: zoom-out;
+    }
+
+    .lightbox-img {
+      max-width: 95vw;
+      max-height: 95vh;
+      object-fit: contain;
+      border-radius: 0.5rem;
+      cursor: default;
+    }
+
+    .lightbox-close {
+      position: fixed;
+      top: 1rem;
+      right: 1rem;
+      width: 2.5rem;
+      height: 2.5rem;
+      border-radius: 50%;
+      border: none;
+      background: rgba(255, 255, 255, 0.15);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      &:hover {
+        background: rgba(255, 255, 255, 0.25);
+      }
     }
 
     .meta-card {
@@ -204,6 +243,7 @@ import {
       border-radius: 0.375rem;
       background: #edf2f7;
       flex-shrink: 0;
+      cursor: pointer;
     }
 
     .action-thumb-placeholder {
@@ -313,6 +353,7 @@ import {
       object-fit: cover;
       border-radius: 0.5rem;
       background: #edf2f7;
+      cursor: pointer;
     }
 
     .photo-meta {
@@ -368,7 +409,12 @@ import {
 
     <div class="body">
       @if (coverUrl()) {
-        <img class="cover-hero" [src]="coverUrl()!" alt="Cover photo" />
+        <img
+          class="cover-hero"
+          [src]="coverUrl()!"
+          alt="Cover photo"
+          (click)="openLightbox(coverUrl()!)"
+        />
       }
 
       <div class="meta-card">
@@ -394,7 +440,12 @@ import {
             @for (photo of unresolvedActionItems(); track photo.id) {
               <div class="action-item-card">
                 @if (photo.signedUrl) {
-                  <img class="action-thumb" [src]="photo.signedUrl" alt="" />
+                  <img
+                    class="action-thumb"
+                    [src]="photo.signedUrl"
+                    alt=""
+                    (click)="openLightbox(photo.signedUrl)"
+                  />
                 } @else {
                   <div class="action-thumb-placeholder">
                     <ng-icon name="heroPhoto" size="16" />
@@ -447,6 +498,7 @@ import {
                           [src]="photo.signedUrl ?? ''"
                           [alt]="photo.description || photo.file_name"
                           loading="lazy"
+                          (click)="openLightbox(photo.signedUrl ?? '')"
                         />
                         <div class="photo-meta">
                           @if (photo.description) {
@@ -502,6 +554,20 @@ import {
         }
       }
     </div>
+
+    @if (lightboxUrl()) {
+      <div class="lightbox-overlay" (click)="closeLightbox()">
+        <button class="lightbox-close" aria-label="Close photo" (click)="closeLightbox()">
+          <ng-icon name="heroXMark" size="20" />
+        </button>
+        <img
+          class="lightbox-img"
+          [src]="lightboxUrl()!"
+          alt="Enlarged photo"
+          (click)="$event.stopPropagation()"
+        />
+      </div>
+    }
   `,
 })
 export class InspectionDetailComponent implements OnInit {
@@ -523,6 +589,7 @@ export class InspectionDetailComponent implements OnInit {
   readonly photosByRoom = signal<Partial<Record<string, InspectionPhoto[]>>>({});
   readonly coverUrl = signal<string | null>(null);
   readonly reopening = signal(false);
+  readonly lightboxUrl = signal<string | null>(null);
 
   readonly typeLabel = computed(
     () =>
@@ -549,6 +616,14 @@ export class InspectionDetailComponent implements OnInit {
 
   toggleRoom(roomId: string): void {
     this.expandedRoom.set(this.expandedRoom() === roomId ? null : roomId);
+  }
+
+  openLightbox(url: string): void {
+    if (url) this.lightboxUrl.set(url);
+  }
+
+  closeLightbox(): void {
+    this.lightboxUrl.set(null);
   }
 
   ngOnInit(): void {
