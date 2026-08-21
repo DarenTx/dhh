@@ -115,18 +115,6 @@ export class GuaranteedPaymentService {
     );
   }
 
-  retractPayment(id: string): Observable<void> {
-    return from(
-      this.supabase
-        .from('guaranteed_payments')
-        .update({ is_active: false })
-        .eq('id', id)
-        .then(({ error }) => {
-          if (error) throw error;
-        }),
-    );
-  }
-
   hardDeletePayment(id: string): Observable<void> {
     return from(
       this.supabase

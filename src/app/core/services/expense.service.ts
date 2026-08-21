@@ -128,18 +128,6 @@ export class ExpenseService {
     );
   }
 
-  retractExpense(id: string): Observable<void> {
-    return from(
-      this.supabase
-        .from('expenses')
-        .update({ is_active: false })
-        .eq('id', id)
-        .then(({ error }) => {
-          if (error) throw error;
-        }),
-    );
-  }
-
   hardDeleteExpense(id: string): Observable<void> {
     return from(
       this.supabase

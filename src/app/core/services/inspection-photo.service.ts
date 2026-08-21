@@ -2,11 +2,7 @@ import { inject, Injectable } from '@angular/core';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { from, Observable, switchMap } from 'rxjs';
 import { SUPABASE_CLIENT } from '../auth/supabase.provider';
-import {
-  InspectionPhoto,
-  InspectionTag,
-  canonicalType,
-} from '../../features/inspections/inspection.types';
+import { InspectionPhoto } from '../../features/inspections/inspection.types';
 
 @Injectable({ providedIn: 'root' })
 export class InspectionPhotoService {
@@ -16,24 +12,12 @@ export class InspectionPhotoService {
     return from(
       this.supabase
         .from('inspection_photos')
-        .select(
-          `*,
-          inspection_photo_tags(
-            tag_id,
-            inspection_tags(id, room_type, name, is_active, created_at)
-          )`,
-        )
+        .select('*')
         .eq('room_id', roomId)
         .order('created_at', { ascending: true })
         .then(({ data, error }) => {
           if (error) throw error;
-          return (data ?? []).map((row: any) => {
-            const tags: InspectionTag[] = (row.inspection_photo_tags ?? [])
-              .map((pt: any) => pt.inspection_tags)
-              .filter(Boolean);
-            const { inspection_photo_tags: _, ...rest } = row;
-            return { ...rest, tags } as InspectionPhoto;
-          });
+          return (data ?? []) as InspectionPhoto[];
         }),
     );
   }
@@ -60,7 +44,7 @@ export class InspectionPhotoService {
 
   updatePhoto(
     id: string,
-    patch: Partial<Pick<InspectionPhoto, 'description' | 'is_actionable' | 'is_resolved'>>,
+    patch: Partial<Pick<InspectionPhoto, 'description' | 'is_flagged'>>,
   ): Observable<void> {
     return from(
       this.supabase
@@ -91,34 +75,6 @@ export class InspectionPhotoService {
             }),
         ),
       ),
-    );
-  }
-
-  /** Atomically replaces all tags on a photo via the set_photo_tags RPC. */
-  setTags(photoId: string, tagIds: string[]): Observable<void> {
-    return from(
-      this.supabase
-        .rpc('set_photo_tags', { p_photo_id: photoId, p_tag_ids: tagIds })
-        .then(({ error }) => {
-          if (error) throw error;
-        }),
-    );
-  }
-
-  /** Returns active tags for the canonical room type (strips numeric suffix). */
-  getTagsForRoomType(roomType: string): Observable<InspectionTag[]> {
-    const canonical = canonicalType(roomType);
-    return from(
-      this.supabase
-        .from('inspection_tags')
-        .select('id, room_type, name, is_active, created_at')
-        .eq('room_type', canonical)
-        .eq('is_active', true)
-        .order('name')
-        .then(({ data, error }) => {
-          if (error) throw error;
-          return (data ?? []) as InspectionTag[];
-        }),
     );
   }
 

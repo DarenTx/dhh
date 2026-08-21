@@ -17,9 +17,7 @@ CREATE TABLE public.documents (
   uploaded_by  uuid        NOT NULL REFERENCES auth.users(id) ON DELETE RESTRICT,
   created_at   timestamptz NOT NULL DEFAULT now(),
   updated_at   timestamptz NOT NULL DEFAULT now(),
-  is_active    boolean     NOT NULL DEFAULT true,
-  deleted_at   timestamptz,
-  deleted_by   uuid        REFERENCES auth.users(id) ON DELETE SET NULL
+  is_active    boolean     NOT NULL DEFAULT true
 );
 
 CREATE INDEX documents_property_id_idx ON public.documents (property_id) WHERE is_active = true;

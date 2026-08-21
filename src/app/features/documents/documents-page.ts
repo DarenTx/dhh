@@ -388,7 +388,7 @@ export class DocumentsPage implements OnInit {
     const label = doc.title;
     if (!confirm(`Delete "${label}"? This action cannot be undone.`)) return;
 
-    this.documentService.delete(doc.id, doc.created_at, doc.storage_path).subscribe({
+    this.documentService.delete(doc.id, doc.storage_path).subscribe({
       next: () => this.loadDocuments(),
       error: (err: Error) => alert(err.message ?? 'Failed to delete document.'),
     });

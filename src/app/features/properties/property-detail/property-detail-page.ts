@@ -321,6 +321,38 @@ const TABS: { id: TabId; label: string; managerOnly?: boolean }[] = [
       }
     }
 
+    .btn-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 2rem;
+      height: 2rem;
+      border: 1px solid #e2e8f0;
+      border-radius: 0.375rem;
+      background: #fff;
+      cursor: pointer;
+      color: #4a5568;
+      &:hover {
+        background: #f7fafc;
+      }
+    }
+
+    .btn-icon-primary {
+      color: #2b6cb0;
+      border-color: #bee3f8;
+      &:hover {
+        background: #ebf8ff;
+      }
+    }
+
+    .btn-icon-danger {
+      color: #e53e3e;
+      border-color: #fed7d7;
+      &:hover {
+        background: #fff5f5;
+      }
+    }
+
     .lease-card,
     .tenant-card {
       background: #fff;
@@ -901,12 +933,12 @@ const TABS: { id: TabId; label: string; managerOnly?: boolean }[] = [
                   </div>
                   @if (canManage()) {
                     <button
-                      class="btn-primary"
-                      style="padding:0.375rem 0.75rem;font-size:0.8125rem;flex-shrink:0"
+                      class="btn-icon btn-icon-primary"
+                      title="Edit"
+                      style="flex-shrink:0"
                       (click)="editMarketValue(mv)"
                     >
                       <ng-icon name="heroPencilSquare" size="14" />
-                      Edit
                     </button>
                   }
                 </div>
@@ -947,20 +979,18 @@ const TABS: { id: TabId; label: string; managerOnly?: boolean }[] = [
                   @if (canManage()) {
                     <div style="display:flex;gap:0.5rem;flex-shrink:0">
                       <button
-                        class="btn-primary"
-                        style="padding:0.375rem 0.75rem;font-size:0.8125rem"
+                        class="btn-icon btn-icon-primary"
+                        title="Edit"
                         (click)="editingPropertyDoc.set(doc)"
                       >
                         <ng-icon name="heroPencilSquare" size="14" />
-                        Edit
                       </button>
                       <button
-                        class="btn-primary"
-                        style="padding:0.375rem 0.75rem;font-size:0.8125rem;background:#fc8181;border-color:#fc8181"
+                        class="btn-icon btn-icon-danger"
+                        title="Delete"
                         (click)="onDeletePropertyDoc(doc)"
                       >
                         <ng-icon name="heroTrash" size="14" />
-                        Delete
                       </button>
                     </div>
                   }
@@ -1228,7 +1258,7 @@ export class PropertyDetailPage implements OnInit {
 
   onDeletePropertyDoc(doc: DocumentWithProperty): void {
     if (!confirm(`Delete "${doc.title}"? This action cannot be undone.`)) return;
-    this.documentService.delete(doc.id, doc.created_at, doc.storage_path).subscribe({
+    this.documentService.delete(doc.id, doc.storage_path).subscribe({
       next: () => {
         const id = this.route.snapshot.paramMap.get('id')!;
         this.loadPropertyDocs(id);

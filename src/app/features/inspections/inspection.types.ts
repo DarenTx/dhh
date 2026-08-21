@@ -39,26 +39,15 @@ export interface InspectionPhoto {
   file_name: string;
   mime_type: string;
   description: string | null;
-  is_actionable: boolean;
-  is_resolved: boolean;
+  is_flagged: boolean;
   uploaded_by: string;
   created_at: string;
   updated_at: string;
   signedUrl?: string;
-  tags?: InspectionTag[];
-}
-
-export interface InspectionTag {
-  id: string;
-  room_type: string;
-  name: string;
-  is_active: boolean;
-  created_at: string;
 }
 
 export interface InspectionWithRollup extends Inspection {
   photoCount: number;
-  unresolvedActionableCount: number;
   coverPhotoUrl: string | null;
   rooms?: InspectionRoom[];
 }
@@ -67,11 +56,6 @@ export interface InspectionWithRollup extends Inspection {
 export function canonicalType(roomType: string): string {
   const parts = roomType.split('_');
   return /^\d+$/.test(parts[parts.length - 1]) ? parts.slice(0, -1).join('_') : roomType;
-}
-
-/** Returns true if the given ISO timestamp is within 24 hours of now */
-export function isWithin24h(createdAt: string): boolean {
-  return Date.now() - new Date(createdAt).getTime() < 24 * 60 * 60 * 1000;
 }
 
 /** Returns true if the given ISO timestamp is within 48 hours of now */
@@ -95,17 +79,15 @@ export function generateRooms(
     { room_type: 'exterior_left', display_name: 'Exterior Left Side', sort_order: 2 },
     { room_type: 'exterior_right', display_name: 'Exterior Right Side', sort_order: 3 },
     { room_type: 'exterior_back', display_name: 'Exterior Backyard', sort_order: 4 },
-    { room_type: 'entryway', display_name: 'Entryway', sort_order: 5 },
-    { room_type: 'living_room', display_name: 'Living Room', sort_order: 6 },
-    { room_type: 'kitchen', display_name: 'Kitchen', sort_order: 7 },
-    { room_type: 'utility_room', display_name: 'Utility Room', sort_order: 8 },
+    { room_type: 'living_room', display_name: 'Living Room', sort_order: 5 },
+    { room_type: 'kitchen', display_name: 'Kitchen', sort_order: 6 },
   ];
 
   for (let i = 1; i <= beds; i++) {
     rooms.push({
       room_type: `bedroom_${i}`,
       display_name: beds === 1 ? 'Bedroom' : `Bedroom ${i}`,
-      sort_order: 8 + i,
+      sort_order: 6 + i,
     });
   }
 
@@ -113,14 +95,14 @@ export function generateRooms(
     rooms.push({
       room_type: `bathroom_${i}`,
       display_name: baths === 1 ? 'Bathroom' : `Bathroom ${i}`,
-      sort_order: 8 + beds + i,
+      sort_order: 6 + beds + i,
     });
   }
 
   rooms.push({
     room_type: 'other',
     display_name: 'Other',
-    sort_order: 8 + beds + baths + 1,
+    sort_order: 6 + beds + baths + 1,
   });
 
   return rooms;

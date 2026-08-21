@@ -72,7 +72,7 @@ type View = 'list' | 'add' | 'edit';
       }
     }
 
-    .btn-icon.danger {
+    .btn-icon-danger {
       color: #e53e3e;
 
       &:hover {
@@ -172,7 +172,8 @@ type View = 'list' | 'add' | 'edit';
               <p class="tenant-name">{{ tenant.first_name }} {{ tenant.last_name }}</p>
               @if (tenant.email || tenant.phone) {
                 <p class="tenant-contact">
-                  {{ tenant.email }}{{ tenant.email && tenant.phone ? ' · ' : '' }}{{ tenant.phone }}
+                  {{ tenant.email }}{{ tenant.email && tenant.phone ? ' · ' : ''
+                  }}{{ tenant.phone }}
                 </p>
               }
             </div>
@@ -186,7 +187,7 @@ type View = 'list' | 'add' | 'edit';
                 <ng-icon name="heroPencilSquare" size="14" />
               </button>
               <button
-                class="btn-icon danger"
+                class="btn-icon btn-icon-danger"
                 type="button"
                 (click)="removeTenant(tenant)"
                 [disabled]="removingId() === tenant.id"

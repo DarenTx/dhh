@@ -39,8 +39,6 @@ export interface DocumentFile {
   created_at: string;
 }
 
-const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
-
 @Injectable({ providedIn: 'root' })
 export class DocumentService {
   private readonly supabase = inject<SupabaseClient>(SUPABASE_CLIENT);
@@ -134,12 +132,8 @@ export class DocumentService {
     );
   }
 
-  delete(id: string, createdAt: string, storagePath: string): Observable<void> {
-    const ageMs = Date.now() - new Date(createdAt).getTime();
-    if (ageMs < TWENTY_FOUR_HOURS_MS) {
-      return this._hardDelete(id, storagePath);
-    }
-    return this._softDelete(id);
+  delete(id: string, storagePath: string): Observable<void> {
+    return this._hardDelete(id, storagePath);
   }
 
   private _hardDelete(id: string, storagePath: string): Observable<void> {
@@ -155,18 +149,6 @@ export class DocumentService {
             }),
         ),
       ),
-    );
-  }
-
-  private _softDelete(id: string): Observable<void> {
-    return from(
-      this.supabase
-        .from('documents')
-        .update({ is_active: false, deleted_at: new Date().toISOString() })
-        .eq('id', id)
-        .then(({ error }) => {
-          if (error) throw error;
-        }),
     );
   }
 }

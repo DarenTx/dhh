@@ -11,24 +11,9 @@ import {
   GmailAllowListEntry,
   GmailConfig,
   GmailHealth,
-  InspectionTag,
   IrsCategory,
   SettingsService,
 } from '../../core/services/settings.service';
-
-const ROOM_TYPE_GROUP_LABELS: Record<string, string> = {
-  exterior_front: 'Exterior Front Yard',
-  exterior_left: 'Exterior Left Side',
-  exterior_right: 'Exterior Right Side',
-  exterior_back: 'Exterior Backyard',
-  entryway: 'Entryway',
-  living_room: 'Living Room',
-  kitchen: 'Kitchen',
-  utility_room: 'Utility Room',
-  bedroom: 'Bedroom',
-  bathroom: 'Bathroom',
-  other: 'Other',
-};
 
 @Component({
   selector: 'app-settings-page',
@@ -196,43 +181,6 @@ const ROOM_TYPE_GROUP_LABELS: Record<string, string> = {
     .add-form input {
       flex: 1;
       width: auto;
-    }
-
-    .insp-group-section {
-      margin-bottom: 1.5rem;
-      border: 1px solid #e2e8f0;
-      border-radius: 0.5rem;
-      overflow: hidden;
-    }
-
-    .insp-group-header {
-      padding: 0.625rem 1rem;
-      background: #f7fafc;
-      font-weight: 600;
-      font-size: 0.9375rem;
-      color: #2d3748;
-      cursor: pointer;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-
-    .insp-tag-list {
-      padding: 0.75rem 1rem;
-    }
-
-    .insp-tag-item {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0.375rem 0;
-      border-bottom: 1px solid #edf2f7;
-      font-size: 0.9375rem;
-      color: #4a5568;
-
-      &:last-of-type {
-        border-bottom: none;
-      }
     }
 
     .status-badge {
@@ -415,51 +363,6 @@ const ROOM_TYPE_GROUP_LABELS: Record<string, string> = {
     </div>
 
     <div class="section">
-      <h2>Inspection Photo Tags</h2>
-
-      @for (entry of roomTypeEntries; track entry.key) {
-        <div class="insp-group-section">
-          <div class="insp-group-header" (click)="toggleInspectionGroup(entry.key)">
-            <span>{{ entry.label }}</span>
-            <span>{{ expandedInspectionGroup() === entry.key ? '▲' : '▼' }}</span>
-          </div>
-
-          @if (expandedInspectionGroup() === entry.key) {
-            <div class="insp-tag-list">
-              @for (tag of inspectionTags()[entry.key] ?? []; track tag.id) {
-                <div class="insp-tag-item">
-                  <span>{{ tag.name }}</span>
-                  <button
-                    class="btn btn-sm btn-danger"
-                    (click)="disableInspectionTag(entry.key, tag)"
-                  >
-                    Disable
-                  </button>
-                </div>
-              }
-              @if ((inspectionTags()[entry.key] ?? []).length === 0) {
-                <p style="color: #718096; font-size: 0.875rem; margin: 0;">No active tags.</p>
-              }
-
-              <div class="add-form">
-                <input
-                  type="text"
-                  placeholder="New tag…"
-                  [(ngModel)]="newInspectionTagNames[entry.key]"
-                  [ngModelOptions]="{ standalone: true }"
-                />
-                <button class="btn btn-primary btn-sm" (click)="addInspectionTag(entry.key)">
-                  <ng-icon name="heroPlus" size="14" />
-                  Add
-                </button>
-              </div>
-            </div>
-          }
-        </div>
-      }
-    </div>
-
-    <div class="section">
       <h2>Gmail Connection</h2>
       <div class="settings-card">
         @if (gmailConfig(); as cfg) {
@@ -627,8 +530,6 @@ export class SettingsPage {
   readonly categories = signal<IrsCategory[]>([]);
   readonly subcategories = signal<Partial<Record<number, ExpenseSubcategory[]>>>({});
   readonly expandedCategory = signal<number | null>(null);
-  readonly inspectionTags = signal<Partial<Record<string, InspectionTag[]>>>({});
-  readonly expandedInspectionGroup = signal<string | null>(null);
 
   // Gmail
   readonly gmailConfig = signal<GmailConfig | null>(null);
@@ -643,12 +544,7 @@ export class SettingsPage {
   newAllowLabel = '';
   private readonly queryParams = toSignal(this.route.queryParams);
 
-  readonly roomTypeEntries = Object.entries(ROOM_TYPE_GROUP_LABELS).map(([key, label]) => ({
-    key,
-    label,
-  }));
   newSubName = '';
-  newInspectionTagNames: Record<string, string> = {};
 
   readonly settingsForm = this.fb.group({
     expenseThreshold: [150, [Validators.required, Validators.min(0)]],
@@ -658,7 +554,6 @@ export class SettingsPage {
   constructor() {
     this.loadSettings();
     this.loadCategories();
-    this.loadInspectionTags();
     this.loadGmailConfig();
     this.loadGmailAllowList();
     this.loadGmailHealth();
@@ -744,40 +639,6 @@ export class SettingsPage {
   disableSub(catId: number, sub: ExpenseSubcategory): void {
     this.settingsService.disableSubcategory(sub.id).subscribe({
       next: () => this.loadSubcategories(catId),
-    });
-  }
-
-  private loadInspectionTags(): void {
-    this.settingsService.getInspectionTags().subscribe({
-      next: (tags) => {
-        const grouped: Record<string, InspectionTag[]> = {};
-        for (const tag of tags) {
-          if (!grouped[tag.room_type]) grouped[tag.room_type] = [];
-          grouped[tag.room_type].push(tag);
-        }
-        this.inspectionTags.set(grouped);
-      },
-    });
-  }
-
-  toggleInspectionGroup(roomType: string): void {
-    this.expandedInspectionGroup.set(this.expandedInspectionGroup() === roomType ? null : roomType);
-  }
-
-  addInspectionTag(roomType: string): void {
-    const name = (this.newInspectionTagNames[roomType] ?? '').trim();
-    if (!name) return;
-    this.settingsService.addInspectionTag(roomType, name).subscribe({
-      next: () => {
-        this.newInspectionTagNames[roomType] = '';
-        this.loadInspectionTags();
-      },
-    });
-  }
-
-  disableInspectionTag(roomType: string, tag: InspectionTag): void {
-    this.settingsService.disableInspectionTag(tag.id).subscribe({
-      next: () => this.loadInspectionTags(),
     });
   }
 

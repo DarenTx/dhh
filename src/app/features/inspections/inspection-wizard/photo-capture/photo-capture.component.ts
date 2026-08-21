@@ -6,7 +6,6 @@ import {
   input,
   output,
   signal,
-  computed,
   untracked,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -18,7 +17,7 @@ import { InspectionStorageService } from '../../../../core/services/inspection-s
 import { InspectionService } from '../../../../core/services/inspection.service';
 import { RoleService } from '../../../../core/role/role.service';
 import { AuthenticationService } from '../../../../core/auth/authentication.service';
-import { InspectionPhoto, InspectionTag, isWithin24h } from '../../inspection.types';
+import { InspectionPhoto } from '../../inspection.types';
 
 @Component({
   selector: 'app-photo-capture',
@@ -150,29 +149,6 @@ import { InspectionPhoto, InspectionTag, isWithin24h } from '../../inspection.ty
       }
     }
 
-    .tag-chips {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.25rem;
-    }
-
-    .tag-chip {
-      padding: 0.125rem 0.5rem;
-      border-radius: 9999px;
-      font-size: 0.75rem;
-      font-weight: 500;
-      cursor: pointer;
-      border: 1px solid #cbd5e0;
-      background: #f7fafc;
-      color: #4a5568;
-
-      &.selected {
-        background: #ebf8ff;
-        border-color: #63b3ed;
-        color: #2b6cb0;
-      }
-    }
-
     .empty-state {
       text-align: center;
       color: #a0aec0;
@@ -232,11 +208,11 @@ import { InspectionPhoto, InspectionTag, isWithin24h } from '../../inspection.ty
 
                 <button
                   class="action-btn"
-                  [class.active]="photo.is_actionable"
-                  (click)="toggleActionable(photo)"
+                  [class.active]="photo.is_flagged"
+                  (click)="toggleFlag(photo)"
                 >
                   <ng-icon name="heroFlag" size="13" />
-                  Action Item
+                  Flag
                 </button>
 
                 @if (canDelete(photo)) {
@@ -254,19 +230,6 @@ import { InspectionPhoto, InspectionTag, isWithin24h } from '../../inspection.ty
                 (input)="onDescriptionInput(photo, $event)"
                 (blur)="flushDescription(photo)"
               ></textarea>
-
-              @if (availableTags().length > 0) {
-                <div class="tag-chips">
-                  @for (tag of availableTags(); track tag.id) {
-                    <span
-                      class="tag-chip"
-                      [class.selected]="isTagSelected(photo, tag)"
-                      (click)="toggleTag(photo, tag)"
-                      >{{ tag.name }}</span
-                    >
-                  }
-                </div>
-              }
             </div>
           </div>
         }
@@ -298,7 +261,6 @@ export class PhotoCaptureComponent {
   readonly loading = signal(true);
   readonly uploading = signal(false);
   readonly photos = signal<InspectionPhoto[]>([]);
-  readonly availableTags = signal<InspectionTag[]>([]);
 
   private readonly descriptionTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
@@ -308,7 +270,6 @@ export class PhotoCaptureComponent {
     this.photos.set([]);
     untracked(() => {
       this.loadPhotos();
-      this.loadTags();
     });
   });
 
@@ -333,12 +294,6 @@ export class PhotoCaptureComponent {
         });
       },
       error: () => this.loading.set(false),
-    });
-  }
-
-  private loadTags(): void {
-    this.photoService.getTagsForRoomType(this.roomType()).subscribe({
-      next: (tags) => this.availableTags.set(tags),
     });
   }
 
@@ -395,11 +350,10 @@ export class PhotoCaptureComponent {
     });
   }
 
-  toggleActionable(photo: InspectionPhoto): void {
-    const is_actionable = !photo.is_actionable;
-    const patch = is_actionable ? { is_actionable } : { is_actionable, is_resolved: false };
-    this.photoService.updatePhoto(photo.id, patch).subscribe({
-      next: () => this.updatePhotoInList(photo.id, patch),
+  toggleFlag(photo: InspectionPhoto): void {
+    const is_flagged = !photo.is_flagged;
+    this.photoService.updatePhoto(photo.id, { is_flagged }).subscribe({
+      next: () => this.updatePhotoInList(photo.id, { is_flagged }),
     });
   }
 
@@ -426,27 +380,8 @@ export class PhotoCaptureComponent {
     // Just let the debounce fire — blur ensures it was already dispatched
   }
 
-  isTagSelected(photo: InspectionPhoto, tag: InspectionTag): boolean {
-    return (photo.tags ?? []).some((t) => t.id === tag.id);
-  }
-
-  toggleTag(photo: InspectionPhoto, tag: InspectionTag): void {
-    const current = (photo.tags ?? []).map((t) => t.id);
-    const newIds = current.includes(tag.id)
-      ? current.filter((id) => id !== tag.id)
-      : [...current, tag.id];
-
-    this.photoService.setTags(photo.id, newIds).subscribe({
-      next: () => {
-        const allTags = this.availableTags();
-        const newTags = allTags.filter((t) => newIds.includes(t.id));
-        this.updatePhotoInList(photo.id, { tags: newTags });
-      },
-    });
-  }
-
-  canDelete(photo: InspectionPhoto): boolean {
-    return this.roles.isManagerOrAbove() && isWithin24h(photo.created_at);
+  canDelete(_photo: InspectionPhoto): boolean {
+    return this.roles.isManagerOrAbove();
   }
 
   deletePhoto(photo: InspectionPhoto): void {

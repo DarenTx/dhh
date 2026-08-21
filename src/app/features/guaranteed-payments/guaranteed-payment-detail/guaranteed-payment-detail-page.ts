@@ -147,6 +147,9 @@ import { SettingsService } from '../../../core/services/settings.service';
       border-top: 1px solid #edf2f7;
     }
     .btn-edit {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.375rem;
       padding: 0.5rem 1rem;
       background: #fff;
       color: #2b6cb0;
@@ -159,6 +162,9 @@ import { SettingsService } from '../../../core/services/settings.service';
       }
     }
     .btn-delete {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.375rem;
       padding: 0.5rem 1rem;
       background: #fff;
       color: #c53030;
@@ -168,19 +174,6 @@ import { SettingsService } from '../../../core/services/settings.service';
       cursor: pointer;
       &:hover {
         background: #fff5f5;
-      }
-    }
-    .btn-hard-delete {
-      padding: 0.5rem 1rem;
-      background: #c53030;
-      color: #fff;
-      border: none;
-      border-radius: 0.375rem;
-      font-size: 0.875rem;
-      font-weight: 600;
-      cursor: pointer;
-      &:hover {
-        background: #9b2c2c;
       }
     }
 
@@ -541,15 +534,18 @@ import { SettingsService } from '../../../core/services/settings.service';
             </div>
           }
 
-          @if (canEditOrDelete() || isAdmin()) {
+          @if (canEdit() || canDelete()) {
             <div class="action-row">
-              @if (canEditOrDelete()) {
-                <button class="btn-edit" (click)="openEdit()">Edit</button>
-                <button class="btn-delete" (click)="showDeleteConfirm.set(true)">Delete</button>
+              @if (canEdit()) {
+                <button class="btn-edit" (click)="openEdit()">
+                  <ng-icon name="heroPencilSquare" size="14" />
+                  Edit
+                </button>
               }
-              @if (isAdmin()) {
-                <button class="btn-hard-delete" (click)="showHardDeleteConfirm.set(true)">
-                  Hard Delete
+              @if (canDelete()) {
+                <button class="btn-delete" (click)="showDeleteConfirm.set(true)">
+                  <ng-icon name="heroTrash" size="14" />
+                  Delete
                 </button>
               }
             </div>
@@ -654,40 +650,6 @@ import { SettingsService } from '../../../core/services/settings.service';
       </div>
     }
 
-    @if (showHardDeleteConfirm()) {
-      <div class="modal-backdrop" (click)="showHardDeleteConfirm.set(false)">
-        <div class="modal" (click)="$event.stopPropagation()">
-          <h3>Permanently Delete Entry?</h3>
-          <p class="confirm-body">
-            This will <strong>permanently delete</strong> the entry for
-            <strong>{{ payment()!.hours_billed }} hrs</strong> on {{ payment()!.work_date }}. This
-            action cannot be undone.
-          </p>
-          @if (hardDeleteError()) {
-            <p class="server-error">{{ hardDeleteError() }}</p>
-          }
-          <div class="btn-row">
-            <button
-              type="button"
-              class="btn-secondary"
-              (click)="showHardDeleteConfirm.set(false)"
-              [disabled]="hardDeleting()"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              class="btn-danger"
-              (click)="confirmHardDelete()"
-              [disabled]="hardDeleting()"
-            >
-              {{ hardDeleting() ? 'Deleting…' : 'Permanently Delete' }}
-            </button>
-          </div>
-        </div>
-      </div>
-    }
-
     @if (rejectDialogOpen()) {
       <div class="reject-modal-backdrop" (click)="closeReject()">
         <div class="reject-modal" (click)="$event.stopPropagation()">
@@ -735,20 +697,14 @@ export class GuaranteedPaymentDetailPage implements OnInit {
   readonly submitterName = signal<string | null>(null);
   readonly threshold = signal<number | null>(null);
 
-  readonly canEditOrDelete = computed(() => {
+  readonly canEdit = computed(() => {
     const payment = this.payment();
     if (!payment || !this.canManage()) return false;
     const uid = this.currentUserId();
-    if (!uid || payment.created_by !== uid) return false;
-    const approvals = this.allApprovals();
-    const anyApproved = approvals.some((r) => r.status === 'approved');
-    if (payment.status === 'pending' && !anyApproved) return true;
-    if (payment.status === 'approved' && approvals.length === 0) {
-      const created = new Date(payment.created_at).getTime();
-      return Date.now() - created < 24 * 60 * 60 * 1000;
-    }
-    return false;
+    return !!uid && payment.created_by === uid;
   });
+
+  readonly canDelete = computed(() => this.canManage());
 
   // Edit state
   readonly showEditForm = signal(false);
@@ -763,9 +719,6 @@ export class GuaranteedPaymentDetailPage implements OnInit {
 
   // Delete state
   readonly showDeleteConfirm = signal(false);
-  readonly showHardDeleteConfirm = signal(false);
-  readonly hardDeleting = signal(false);
-  readonly hardDeleteError = signal<string | null>(null);
 
   readonly rejectDialogOpen = signal(false);
   readonly rejectReason = signal('');
@@ -774,10 +727,6 @@ export class GuaranteedPaymentDetailPage implements OnInit {
 
   canManage(): boolean {
     return this.roles.isManagerOrAbove();
-  }
-
-  isAdmin(): boolean {
-    return this.roles.isAdmin();
   }
 
   ngOnInit(): void {
@@ -866,25 +815,9 @@ export class GuaranteedPaymentDetailPage implements OnInit {
   confirmDelete(): void {
     const gp = this.payment();
     if (!gp) return;
-    this.gpService.retractPayment(gp.id).subscribe(() => {
-      this.router.navigate(['/guaranteed-payments']);
-    });
-  }
-
-  confirmHardDelete(): void {
-    const gp = this.payment();
-    if (!gp) return;
-    this.hardDeleting.set(true);
-    this.hardDeleteError.set(null);
     this.gpService.hardDeletePayment(gp.id).subscribe({
-      next: () => {
-        this.hardDeleting.set(false);
-        this.router.navigate(['/guaranteed-payments']);
-      },
-      error: (err) => {
-        this.hardDeleting.set(false);
-        this.hardDeleteError.set(err?.message ?? 'Failed to delete entry.');
-      },
+      next: () => this.router.navigate(['/guaranteed-payments']),
+      error: () => this.showDeleteConfirm.set(false),
     });
   }
 

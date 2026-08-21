@@ -12,14 +12,10 @@ import { DatePipe, TitleCasePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { NgIconComponent } from '@ng-icons/core';
 import { InspectionService } from '../../../core/services/inspection.service';
+import { InspectionStorageService } from '../../../core/services/inspection-storage.service';
 import { RoleService } from '../../../core/role/role.service';
 import { Lease } from '../../../core/services/lease.service';
-import {
-  INSPECTION_TYPE_LABELS,
-  InspectionType,
-  InspectionWithRollup,
-  isWithin24h,
-} from '../inspection.types';
+import { INSPECTION_TYPE_LABELS, InspectionType, InspectionWithRollup } from '../inspection.types';
 
 @Component({
   selector: 'app-inspections-tab',
@@ -66,15 +62,9 @@ import {
       border: 1px solid #e2e8f0;
       border-radius: 0.75rem;
       padding: 1rem 1.25rem;
-      cursor: pointer;
-      transition: box-shadow 0.15s;
       display: flex;
       flex-direction: column;
       gap: 0.5rem;
-
-      &:hover {
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-      }
     }
 
     .inspection-card-layout {
@@ -115,21 +105,41 @@ import {
       margin: 0;
     }
 
-    .badge {
+    .btn-card-actions {
+      display: flex;
+      gap: 0.375rem;
+      margin-top: 0.25rem;
+    }
+
+    .btn-icon {
       display: inline-flex;
       align-items: center;
-      font-size: 0.75rem;
-      font-weight: 600;
-      padding: 0.125rem 0.5rem;
-      border-radius: 9999px;
-
-      &.in-progress {
-        background: #ebf8ff;
-        color: #2b6cb0;
+      justify-content: center;
+      width: 2rem;
+      height: 2rem;
+      border: 1px solid #e2e8f0;
+      border-radius: 0.375rem;
+      background: #fff;
+      cursor: pointer;
+      color: #4a5568;
+      &:hover {
+        background: #f7fafc;
       }
-      &.completed {
-        background: #f0fff4;
-        color: #276749;
+    }
+
+    .btn-icon-primary {
+      color: #2b6cb0;
+      border-color: #bee3f8;
+      &:hover {
+        background: #ebf8ff;
+      }
+    }
+
+    .btn-icon-danger {
+      color: #e53e3e;
+      border-color: #fed7d7;
+      &:hover {
+        background: #fff5f5;
       }
     }
 
@@ -146,11 +156,6 @@ import {
       color: #a0aec0;
       display: flex;
       gap: 1rem;
-
-      .stat-warn {
-        color: #c53030;
-        font-weight: 600;
-      }
     }
 
     .empty-state {
@@ -260,12 +265,12 @@ import {
       align-items: center;
       gap: 0.375rem;
       padding: 0.5rem 1rem;
-      background: transparent;
+      background: #edf2f7;
       color: #4a5568;
-      border: 1px solid #cbd5e0;
+      border: none;
       border-radius: 0.375rem;
       font-size: 0.9375rem;
-      font-weight: 600;
+      font-weight: 500;
       cursor: pointer;
     }
 
@@ -277,12 +282,10 @@ import {
   template: `
     @if (canManage()) {
       <div class="action-bar">
-        @if (!activeInspection()) {
-          <button class="btn-primary" (click)="openStartModal()">
-            <ng-icon name="heroPlus" size="16" />
-            Start Inspection
-          </button>
-        }
+        <button class="btn-primary" (click)="openStartModal()">
+          <ng-icon name="heroPlus" size="16" />
+          Start Inspection
+        </button>
       </div>
     }
 
@@ -293,7 +296,7 @@ import {
     } @else {
       <div class="inspection-list">
         @for (insp of inspections(); track insp.id) {
-          <div class="inspection-card" (click)="openInspection(insp)">
+          <div class="inspection-card">
             <div class="inspection-card-layout">
               @if (insp.coverPhotoUrl) {
                 <img
@@ -306,13 +309,6 @@ import {
               <div class="inspection-card-body">
                 <div class="card-header">
                   <p class="card-title">{{ insp.title }}</p>
-                  <span
-                    class="badge"
-                    [class.in-progress]="isActive(insp)"
-                    [class.completed]="!isActive(insp)"
-                  >
-                    {{ isActive(insp) ? 'Active' : 'Completed' }}
-                  </span>
                 </div>
                 <div class="card-meta">
                   <span>{{ typeLabel(insp.inspection_type) }}</span>
@@ -320,13 +316,28 @@ import {
                 </div>
                 <div class="card-stats">
                   <span>{{ insp.photoCount }} photo{{ insp.photoCount === 1 ? '' : 's' }}</span>
-                  @if (insp.unresolvedActionableCount > 0) {
-                    <span class="stat-warn"
-                      >{{ insp.unresolvedActionableCount }} unresolved action item{{
-                        insp.unresolvedActionableCount === 1 ? '' : 's'
-                      }}</span
+                </div>
+                <div class="btn-card-actions">
+                  @if (canManage()) {
+                    <button
+                      class="btn-icon btn-icon-primary"
+                      title="Edit"
+                      (click)="editInspection(insp)"
                     >
+                      <ng-icon name="heroPencilSquare" size="15" />
+                    </button>
+                    <button
+                      class="btn-icon btn-icon-danger"
+                      title="Delete"
+                      [disabled]="deleting() === insp.id"
+                      (click)="deleteInspection(insp)"
+                    >
+                      <ng-icon name="heroTrash" size="15" />
+                    </button>
                   }
+                  <button class="btn-icon" title="View" (click)="viewInspection(insp)">
+                    <ng-icon name="heroEye" size="15" />
+                  </button>
                 </div>
               </div>
             </div>
@@ -403,11 +414,13 @@ export class InspectionsTabComponent implements OnInit {
   readonly leases = input<Lease[]>([]);
 
   private readonly inspectionService = inject(InspectionService);
+  private readonly storageService = inject(InspectionStorageService);
   private readonly roles = inject(RoleService);
   private readonly router = inject(Router);
 
   readonly loading = signal(true);
   readonly inspections = signal<InspectionWithRollup[]>([]);
+  readonly deleting = signal<string | null>(null);
   readonly showStartModal = signal(false);
   readonly starting = signal(false);
   readonly startError = signal<string | null>(null);
@@ -422,10 +435,6 @@ export class InspectionsTabComponent implements OnInit {
     { value: 'other', label: 'Other' },
   ];
 
-  readonly activeInspection = computed(
-    () => this.inspections().find((i) => isWithin24h(i.created_at)) ?? null,
-  );
-
   readonly activeLeases = computed(() => this.leases().filter((l) => l.status === 'active'));
 
   canManage(): boolean {
@@ -434,10 +443,6 @@ export class InspectionsTabComponent implements OnInit {
 
   typeLabel(type: string): string {
     return INSPECTION_TYPE_LABELS[type as InspectionType] ?? type;
-  }
-
-  isActive(insp: InspectionWithRollup): boolean {
-    return isWithin24h(insp.created_at);
   }
 
   ngOnInit(): void {
@@ -498,19 +503,37 @@ export class InspectionsTabComponent implements OnInit {
         },
         error: (err) => {
           this.starting.set(false);
-          const msg: string = err?.message ?? '';
-          if (msg.includes('uq_one_active_inspection')) {
-            this.startError.set(
-              'There is already an active inspection for this property. Please wait 24 hours or save it before starting a new one.',
-            );
-          } else {
-            this.startError.set(msg || 'Failed to start inspection.');
-          }
+          this.startError.set(err?.message || 'Failed to start inspection.');
         },
       });
   }
 
-  openInspection(insp: InspectionWithRollup): void {
+  editInspection(insp: InspectionWithRollup): void {
+    this.router.navigate(['/properties', this.propertyId(), 'inspections', insp.id], {
+      queryParams: { mode: 'edit' },
+    });
+  }
+
+  viewInspection(insp: InspectionWithRollup): void {
     this.router.navigate(['/properties', this.propertyId(), 'inspections', insp.id]);
+  }
+
+  deleteInspection(insp: InspectionWithRollup): void {
+    if (
+      !confirm(
+        `Delete "${insp.title}"? This will permanently remove the inspection and all its photos. This cannot be undone.`,
+      )
+    )
+      return;
+    this.deleting.set(insp.id);
+    this.inspectionService
+      .hardDeleteInspection(insp.id, (paths) => this.storageService.deletePhotos(paths))
+      .subscribe({
+        next: () => {
+          this.deleting.set(null);
+          this.inspections.update((prev) => prev.filter((i) => i.id !== insp.id));
+        },
+        error: () => this.deleting.set(null),
+      });
   }
 }

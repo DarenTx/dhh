@@ -1,6 +1,6 @@
 import { inject, Injectable } from '@angular/core';
 import { SupabaseClient } from '@supabase/supabase-js';
-import { from, Observable, switchMap } from 'rxjs';
+import { from, map, Observable, switchMap } from 'rxjs';
 import { SUPABASE_CLIENT } from '../auth/supabase.provider';
 import {
   Inspection,
@@ -27,7 +27,6 @@ export class InspectionService {
           return (data ?? []).map((row: any) => ({
             ...row,
             photoCount: 0,
-            unresolvedActionableCount: 0,
             coverPhotoUrl: null,
           })) as InspectionWithRollup[];
         }),
@@ -38,20 +37,16 @@ export class InspectionService {
         return from(
           this.supabase
             .from('inspection_photos')
-            .select('id, inspection_id, is_actionable, is_resolved, storage_path')
+            .select('id, inspection_id, storage_path')
             .in('inspection_id', ids)
             .then(({ data: allPhotos, error: allErr }) => {
               if (allErr) throw allErr;
 
               const photoMap = new Map<string, number>();
-              const unresolvedMap = new Map<string, number>();
               const coverPathMap = new Map<string, string>();
               for (const row of allPhotos ?? []) {
                 const iid = (row as any).inspection_id as string;
                 photoMap.set(iid, (photoMap.get(iid) ?? 0) + 1);
-                if ((row as any).is_actionable && !(row as any).is_resolved) {
-                  unresolvedMap.set(iid, (unresolvedMap.get(iid) ?? 0) + 1);
-                }
                 const photoId = (row as any).id as string;
                 const storagePath = (row as any).storage_path as string;
                 const inspection = inspections.find((insp) => insp.id === iid);
@@ -63,7 +58,6 @@ export class InspectionService {
               const withCounts = inspections.map((insp) => ({
                 ...insp,
                 photoCount: photoMap.get(insp.id) ?? 0,
-                unresolvedActionableCount: unresolvedMap.get(insp.id) ?? 0,
                 coverPhotoUrl: null,
               }));
 
@@ -151,7 +145,7 @@ export class InspectionService {
         }),
     ).pipe(
       switchMap((inspection) =>
-        this.createRoomsForInspection(inspection.id, bedrooms, bathrooms).pipe(
+        this.createRoomsForInspection(inspection.id, propertyId, bedrooms, bathrooms).pipe(
           switchMap(() => from(Promise.resolve(inspection))),
         ),
       ),
@@ -160,20 +154,82 @@ export class InspectionService {
 
   createRoomsForInspection(
     inspectionId: string,
+    propertyId: string,
     bedrooms: number | null,
     bathrooms: number | null,
   ): Observable<void> {
-    const rooms = generateRooms(bedrooms, bathrooms).map((r) => ({
-      inspection_id: inspectionId,
-      ...r,
-    }));
+    const standard = generateRooms(bedrooms, bathrooms);
+    const maxStandardOrder = standard[standard.length - 1]?.sort_order ?? 0;
+    return from(
+      this.supabase
+        .from('property_room_templates')
+        .select('display_name, sort_order')
+        .eq('property_id', propertyId)
+        .order('sort_order', { ascending: true })
+        .then(({ data, error }) => {
+          if (error) throw error;
+          return (data ?? []) as { display_name: string; sort_order: number }[];
+        }),
+    ).pipe(
+      switchMap((templates) => {
+        const customRooms = templates.map((t, i) => ({
+          inspection_id: inspectionId,
+          room_type: toRoomTypeSlug(t.display_name),
+          display_name: t.display_name,
+          sort_order: maxStandardOrder + i + 1,
+        }));
+        const rooms = [
+          ...standard.map((r) => ({ inspection_id: inspectionId, ...r })),
+          ...customRooms,
+        ];
+        return from(
+          this.supabase
+            .from('inspection_rooms')
+            .upsert(rooms, { onConflict: 'inspection_id,room_type', ignoreDuplicates: true })
+            .then(({ error }) => {
+              if (error) throw error;
+            }),
+        );
+      }),
+    );
+  }
+
+  addRoomToInspection(
+    inspectionId: string,
+    propertyId: string,
+    displayName: string,
+    afterSortOrder: number,
+  ): Observable<InspectionRoom> {
+    const room_type = toRoomTypeSlug(displayName);
     return from(
       this.supabase
         .from('inspection_rooms')
-        .upsert(rooms, { onConflict: 'inspection_id,room_type', ignoreDuplicates: true })
-        .then(({ error }) => {
+        .insert({
+          inspection_id: inspectionId,
+          room_type,
+          display_name: displayName,
+          sort_order: afterSortOrder,
+        })
+        .select()
+        .single()
+        .then(({ data, error }) => {
           if (error) throw error;
+          return data as InspectionRoom;
         }),
+    ).pipe(
+      switchMap((room) =>
+        from(
+          this.supabase
+            .from('property_room_templates')
+            .upsert(
+              { property_id: propertyId, display_name: displayName, sort_order: afterSortOrder },
+              { onConflict: 'property_id,display_name', ignoreDuplicates: true },
+            )
+            .then(({ error }) => {
+              if (error) throw error;
+            }),
+        ).pipe(map(() => room)),
+      ),
     );
   }
 
@@ -256,4 +312,15 @@ export class InspectionService {
       }),
     );
   }
+}
+
+/** Converts a display name to a stable room_type slug, e.g. "Back Porch" → "custom_back_porch" */
+function toRoomTypeSlug(displayName: string): string {
+  return (
+    'custom_' +
+    displayName
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_|_$/g, '')
+  );
 }

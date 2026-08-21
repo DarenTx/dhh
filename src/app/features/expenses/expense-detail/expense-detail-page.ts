@@ -288,6 +288,9 @@ import { PropertyService } from '../../../core/services/property.service';
       border-top: 1px solid #edf2f7;
     }
     .btn-edit {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.375rem;
       padding: 0.5rem 1rem;
       background: #fff;
       color: #2b6cb0;
@@ -300,6 +303,9 @@ import { PropertyService } from '../../../core/services/property.service';
       }
     }
     .btn-delete {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.375rem;
       padding: 0.5rem 1rem;
       background: #fff;
       color: #c53030;
@@ -311,20 +317,6 @@ import { PropertyService } from '../../../core/services/property.service';
         background: #fff5f5;
       }
     }
-    .btn-hard-delete {
-      padding: 0.5rem 1rem;
-      background: #c53030;
-      color: #fff;
-      border: none;
-      border-radius: 0.375rem;
-      font-size: 0.875rem;
-      font-weight: 600;
-      cursor: pointer;
-      &:hover {
-        background: #9b2c2c;
-      }
-    }
-
     .modal-backdrop {
       position: fixed;
       inset: 0;
@@ -607,15 +599,18 @@ import { PropertyService } from '../../../core/services/property.service';
             </div>
           }
 
-          @if (canEditOrDelete() || isAdmin()) {
+          @if (canEdit() || canDelete()) {
             <div class="action-row">
-              @if (canEditOrDelete()) {
-                <button class="btn-edit" (click)="openEdit()">Edit</button>
-                <button class="btn-delete" (click)="showDeleteConfirm.set(true)">Delete</button>
+              @if (canEdit()) {
+                <button class="btn-edit" (click)="openEdit()">
+                  <ng-icon name="heroPencilSquare" size="14" />
+                  Edit
+                </button>
               }
-              @if (isAdmin()) {
-                <button class="btn-hard-delete" (click)="showHardDeleteConfirm.set(true)">
-                  Hard Delete
+              @if (canDelete()) {
+                <button class="btn-delete" (click)="showDeleteConfirm.set(true)">
+                  <ng-icon name="heroTrash" size="14" />
+                  Delete
                 </button>
               }
             </div>
@@ -807,40 +802,6 @@ import { PropertyService } from '../../../core/services/property.service';
       </div>
     }
 
-    @if (showHardDeleteConfirm()) {
-      <div class="modal-backdrop" (click)="showHardDeleteConfirm.set(false)">
-        <div class="modal" (click)="$event.stopPropagation()">
-          <h3>Permanently Delete Expense?</h3>
-          <p class="confirm-body">
-            This will <strong>permanently delete</strong> the expense of
-            <strong>\${{ expense()!.amount.toFixed(2) }}</strong> logged on {{ expense()!.date }},
-            along with all associated evidence files. This action cannot be undone.
-          </p>
-          @if (hardDeleteError()) {
-            <p class="server-error">{{ hardDeleteError() }}</p>
-          }
-          <div class="btn-row">
-            <button
-              type="button"
-              class="btn-secondary"
-              (click)="showHardDeleteConfirm.set(false)"
-              [disabled]="hardDeleting()"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              class="btn-danger"
-              (click)="confirmHardDelete()"
-              [disabled]="hardDeleting()"
-            >
-              {{ hardDeleting() ? 'Deleting…' : 'Permanently Delete' }}
-            </button>
-          </div>
-        </div>
-      </div>
-    }
-
     @if (rejectDialogOpen()) {
       <div class="reject-modal-backdrop" (click)="closeReject()">
         <div class="reject-modal" (click)="$event.stopPropagation()">
@@ -895,24 +856,14 @@ export class ExpenseDetailPage implements OnInit {
   readonly allApprovals = signal<ApprovalRequirement[]>([]);
   readonly threshold = signal<number | null>(null);
 
-  readonly canEditOrDelete = computed(() => {
+  readonly canEdit = computed(() => {
     const expense = this.expense();
     if (!expense || !this.canManage()) return false;
-    // Only the record owner may edit or delete, regardless of role.
-    // Also hide buttons when the session hasn't resolved yet (uid === null).
     const uid = this.currentUserId();
-    if (!uid || expense.created_by !== uid) return false;
-    const approvals = this.allApprovals();
-    const anyApproved = approvals.some((r) => r.status === 'approved');
-    // Pending and nobody has approved it yet
-    if (expense.status === 'pending' && !anyApproved) return true;
-    // Auto-approved (no approval rows = below threshold) within 24 hours of entry
-    if (expense.status === 'approved' && approvals.length === 0) {
-      const created = new Date(expense.created_at).getTime();
-      return Date.now() - created < 24 * 60 * 60 * 1000;
-    }
-    return false;
+    return !!uid && expense.created_by === uid;
   });
+
+  readonly canDelete = computed(() => this.canManage());
 
   // Edit state
   readonly showEditForm = signal(false);
@@ -934,9 +885,6 @@ export class ExpenseDetailPage implements OnInit {
 
   // Delete state
   readonly showDeleteConfirm = signal(false);
-  readonly showHardDeleteConfirm = signal(false);
-  readonly hardDeleting = signal(false);
-  readonly hardDeleteError = signal<string | null>(null);
 
   readonly rejectDialogOpen = signal(false);
   readonly rejectReason = signal('');
@@ -945,10 +893,6 @@ export class ExpenseDetailPage implements OnInit {
 
   canManage(): boolean {
     return this.roles.isManagerOrAbove();
-  }
-
-  isAdmin(): boolean {
-    return this.roles.isAdmin();
   }
 
   ngOnInit(): void {
@@ -1058,25 +1002,9 @@ export class ExpenseDetailPage implements OnInit {
   confirmDelete(): void {
     const expense = this.expense();
     if (!expense) return;
-    this.expenseService.retractExpense(expense.id).subscribe(() => {
-      this.router.navigate(['/expenses']);
-    });
-  }
-
-  confirmHardDelete(): void {
-    const expense = this.expense();
-    if (!expense) return;
-    this.hardDeleting.set(true);
-    this.hardDeleteError.set(null);
     this.expenseService.hardDeleteExpense(expense.id).subscribe({
-      next: () => {
-        this.hardDeleting.set(false);
-        this.router.navigate(['/expenses']);
-      },
-      error: (err) => {
-        this.hardDeleting.set(false);
-        this.hardDeleteError.set(err?.message ?? 'Failed to delete expense.');
-      },
+      next: () => this.router.navigate(['/expenses']),
+      error: () => this.showDeleteConfirm.set(false),
     });
   }
 

@@ -10,7 +10,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { InspectionService } from '../../../core/services/inspection.service';
 import { PropertyService } from '../../../core/services/property.service';
 import { RoleService } from '../../../core/role/role.service';
-import { Inspection, InspectionRoom, isWithin24h } from '../inspection.types';
+import { Inspection, InspectionRoom } from '../inspection.types';
 import { InspectionWizardComponent } from '../inspection-wizard/inspection-wizard.component';
 import { InspectionDetailComponent } from '../inspection-detail/inspection-detail.component';
 
@@ -43,7 +43,7 @@ import { InspectionDetailComponent } from '../inspection-detail/inspection-detai
       @if (showWizard()) {
         <app-inspection-wizard
           [inspection]="inspection()!"
-          [rooms]="rooms()"
+          [initialRooms]="rooms()"
           [propertyId]="propertyId"
           [propertyAddress]="propertyAddress()"
           (back)="goBack()"
@@ -83,8 +83,7 @@ export class InspectionPageComponent implements OnInit {
   }
 
   readonly showWizard = computed(() => {
-    const insp = this.inspection();
-    return !!insp && isWithin24h(insp.created_at) && this.canManage();
+    return this.route.snapshot.queryParamMap.get('mode') === 'edit' && this.canManage();
   });
 
   canManage(): boolean {

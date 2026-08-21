@@ -9,15 +9,17 @@ import {
   signal,
 } from '@angular/core';
 import { forkJoin } from 'rxjs';
+import { FormsModule } from '@angular/forms';
 import { NgIconComponent } from '@ng-icons/core';
 import { InspectionPhotoService } from '../../../core/services/inspection-photo.service';
+import { InspectionService } from '../../../core/services/inspection.service';
 import { Inspection, InspectionRoom, INSPECTION_TYPE_LABELS } from '../inspection.types';
 import { PhotoCaptureComponent } from './photo-capture/photo-capture.component';
 
 @Component({
   selector: 'app-inspection-wizard',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgIconComponent, PhotoCaptureComponent],
+  imports: [FormsModule, NgIconComponent, PhotoCaptureComponent],
   styles: `
     :host {
       display: flex;
@@ -159,6 +161,70 @@ import { PhotoCaptureComponent } from './photo-capture/photo-capture.component';
       background: rgba(255, 255, 255, 0.25);
     }
 
+    .add-room-chip {
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+      padding: 0.375rem 0.75rem;
+      border: 1px dashed #a0aec0;
+      border-radius: 9999px;
+      background: transparent;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      white-space: nowrap;
+      cursor: pointer;
+      color: #718096;
+      flex-shrink: 0;
+      transition: all 0.12s;
+      &:hover {
+        border-color: #4a5568;
+        color: #4a5568;
+      }
+    }
+
+    .add-room-form {
+      display: flex;
+      align-items: center;
+      gap: 0.375rem;
+      flex-shrink: 0;
+    }
+
+    .add-room-input {
+      padding: 0.25rem 0.625rem;
+      border: 1px solid #4a90d9;
+      border-radius: 9999px;
+      font-size: 0.8125rem;
+      outline: none;
+      width: 9rem;
+      background: #fff;
+    }
+
+    .add-room-save {
+      padding: 0.25rem 0.625rem;
+      background: #2b6cb0;
+      color: #fff;
+      border: none;
+      border-radius: 9999px;
+      font-size: 0.8125rem;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      &:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+    }
+
+    .add-room-cancel {
+      padding: 0.25rem 0.5rem;
+      background: transparent;
+      color: #718096;
+      border: none;
+      border-radius: 9999px;
+      font-size: 0.8125rem;
+      cursor: pointer;
+    }
+
     /* Scrollable content */
     .content {
       flex: 1;
@@ -204,7 +270,33 @@ import { PhotoCaptureComponent } from './photo-capture/photo-capture.component';
     </div>
 
     <div class="room-nav">
-      @for (room of rooms(); track room.id; let i = $index) {
+      @if (showAddRoom()) {
+        <div class="add-room-form">
+          <input
+            class="add-room-input"
+            [(ngModel)]="newRoomName"
+            placeholder="Room name"
+            maxlength="50"
+            (keydown.enter)="saveNewRoom()"
+            (keydown.escape)="cancelAddRoom()"
+            autofocus
+          />
+          <button
+            class="add-room-save"
+            [disabled]="addingRoom() || !newRoomName().trim()"
+            (click)="saveNewRoom()"
+          >
+            {{ addingRoom() ? 'Adding…' : 'Add' }}
+          </button>
+          <button class="add-room-cancel" (click)="cancelAddRoom()">Cancel</button>
+        </div>
+      } @else {
+        <button class="add-room-chip" (click)="showAddRoom.set(true)" aria-label="Add room">
+          <ng-icon name="heroPlus" size="16" />
+          Add Room
+        </button>
+      }
+      @for (room of localRooms(); track room.id; let i = $index) {
         <button
           class="room-chip"
           [class.active]="activeRoomIndex() === i"
@@ -222,7 +314,9 @@ import { PhotoCaptureComponent } from './photo-capture/photo-capture.component';
       @if (activeRoom(); as room) {
         <div class="room-header">
           <h2>{{ room.display_name }}</h2>
-          <span class="room-counter">Room {{ activeRoomIndex() + 1 }} of {{ rooms().length }}</span>
+          <span class="room-counter"
+            >Room {{ activeRoomIndex() + 1 }} of {{ localRooms().length }}</span
+          >
         </div>
 
         <app-photo-capture
@@ -240,21 +334,30 @@ import { PhotoCaptureComponent } from './photo-capture/photo-capture.component';
 })
 export class InspectionWizardComponent {
   readonly inspection = input.required<Inspection>();
-  readonly rooms = input.required<InspectionRoom[]>();
+  readonly initialRooms = input.required<InspectionRoom[]>();
   readonly propertyId = input.required<string>();
   readonly propertyAddress = input<string>('');
 
   readonly back = output<void>();
 
   private readonly photoService = inject(InspectionPhotoService);
+  private readonly inspectionService = inject(InspectionService);
 
   readonly activeRoomIndex = signal(0);
   readonly coverPhotoId = signal<string | null>(null);
   readonly coverUrl = signal<string | null>(null);
   readonly roomPhotoCounts = signal<Partial<Record<string, number>>>({});
+  readonly localRooms = signal<InspectionRoom[]>([]);
+  readonly showAddRoom = signal(false);
+  readonly newRoomName = signal('');
+  readonly addingRoom = signal(false);
+
+  private readonly _syncRoomsEffect = effect(() => {
+    this.localRooms.set(this.initialRooms());
+  });
 
   private readonly _loadPhotoCountsEffect = effect(() => {
-    const rooms = this.rooms();
+    const rooms = this.localRooms();
     const activeCoverId = this.coverPhotoId() ?? this.inspection().cover_photo_id;
     if (rooms.length === 0) {
       this.roomPhotoCounts.set({});
@@ -264,12 +367,35 @@ export class InspectionWizardComponent {
     this.loadRoomPhotoData(rooms, activeCoverId);
   });
 
-  readonly activeRoom = computed(() => this.rooms()[this.activeRoomIndex()] ?? null);
+  readonly activeRoom = computed(() => this.localRooms()[this.activeRoomIndex()] ?? null);
   readonly typeLabel = computed(
     () =>
       INSPECTION_TYPE_LABELS[this.inspection().inspection_type] ??
       this.inspection().inspection_type,
   );
+
+  saveNewRoom(): void {
+    const name = this.newRoomName().trim();
+    if (!name || this.addingRoom()) return;
+    const nextSortOrder = (this.localRooms().at(-1)?.sort_order ?? 0) + 1;
+    this.addingRoom.set(true);
+    this.inspectionService
+      .addRoomToInspection(this.inspection().id, this.propertyId(), name, nextSortOrder)
+      .subscribe({
+        next: (room) => {
+          this.localRooms.update((prev) => [...prev, room]);
+          this.activeRoomIndex.set(this.localRooms().length - 1);
+          this.cancelAddRoom();
+          this.addingRoom.set(false);
+        },
+        error: () => this.addingRoom.set(false),
+      });
+  }
+
+  cancelAddRoom(): void {
+    this.showAddRoom.set(false);
+    this.newRoomName.set('');
+  }
 
   onPhotoAdded(roomId: string): void {
     this.roomPhotoCounts.update((prev) => ({

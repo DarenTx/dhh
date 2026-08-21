@@ -18,7 +18,6 @@ import {
   InspectionPhoto,
   InspectionRoom,
   INSPECTION_TYPE_LABELS,
-  isWithin24h,
   isWithin48h,
 } from '../inspection.types';
 
@@ -188,129 +187,6 @@ import {
       }
     }
 
-    /* Unresolved action items */
-    .action-items-section {
-      margin-bottom: 1rem;
-    }
-
-    .section-heading {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      margin: 0 0 0.5rem;
-      font-size: 0.875rem;
-      font-weight: 700;
-      color: #4a5568;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-    }
-
-    .action-count-badge {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      min-width: 1.25rem;
-      height: 1.25rem;
-      padding: 0 0.3rem;
-      background: #c53030;
-      color: #fff;
-      border-radius: 9999px;
-      font-size: 0.6875rem;
-      font-weight: 700;
-      letter-spacing: 0;
-      text-transform: none;
-    }
-
-    .action-item-card {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      background: #fff;
-      border: 1px solid #e2e8f0;
-      border-left: 3px solid #fc8181;
-      border-radius: 0.5rem;
-      padding: 0.625rem 0.75rem 0.625rem calc(0.75rem - 2px);
-      margin-bottom: 0.375rem;
-      &:last-of-type {
-        margin-bottom: 0;
-      }
-    }
-
-    .action-thumb {
-      width: 2.75rem;
-      height: 2.75rem;
-      object-fit: cover;
-      border-radius: 0.375rem;
-      background: #edf2f7;
-      flex-shrink: 0;
-      cursor: pointer;
-    }
-
-    .action-thumb-placeholder {
-      width: 2.75rem;
-      height: 2.75rem;
-      border-radius: 0.375rem;
-      background: #fed7d7;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: #fc8181;
-      flex-shrink: 0;
-    }
-
-    .action-content {
-      flex: 1;
-      min-width: 0;
-    }
-
-    .action-desc {
-      font-size: 0.9375rem;
-      color: #2d3748;
-      font-weight: 500;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      margin: 0 0 0.125rem;
-    }
-
-    .action-room {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.2rem;
-      font-size: 0.75rem;
-      color: #718096;
-    }
-
-    .resolve-btn {
-      display: flex;
-      align-items: center;
-      gap: 0.25rem;
-      padding: 0.3125rem 0.625rem;
-      border: 1px solid #fc8181;
-      border-radius: 0.375rem;
-      background: #fff5f5;
-      color: #c53030;
-      font-size: 0.8125rem;
-      font-weight: 600;
-      cursor: pointer;
-      flex-shrink: 0;
-      white-space: nowrap;
-      transition:
-        background 0.12s,
-        border-color 0.12s;
-      &:hover {
-        background: #fed7d7;
-      }
-      &.resolved {
-        background: #f0fff4;
-        border-color: #68d391;
-        color: #276749;
-        &:hover {
-          background: #c6f6d5;
-        }
-      }
-    }
-
     /* Room accordion */
     .room-section {
       margin-bottom: 1rem;
@@ -362,7 +238,7 @@ import {
       color: #718096;
     }
 
-    .photo-action-badge {
+    .photo-flag-badge {
       display: inline-flex;
       align-items: center;
       gap: 0.2rem;
@@ -370,14 +246,8 @@ import {
       font-weight: 600;
       padding: 0.1rem 0.375rem;
       border-radius: 9999px;
-      &.unresolved {
-        background: #fff5f5;
-        color: #c53030;
-      }
-      &.resolved {
-        background: #f0fff4;
-        color: #276749;
-      }
+      background: #fff5f5;
+      color: #c53030;
     }
 
     .empty-state {
@@ -429,44 +299,6 @@ import {
       @if (loadingPhotos()) {
         <p class="loading-state">Loading photos…</p>
       } @else {
-        <!-- Unresolved action items -->
-        @if (unresolvedActionItems().length > 0) {
-          <div class="action-items-section">
-            <p class="section-heading">
-              <ng-icon name="heroFlag" size="13" />
-              Action Items
-              <span class="action-count-badge">{{ unresolvedActionItems().length }}</span>
-            </p>
-            @for (photo of unresolvedActionItems(); track photo.id) {
-              <div class="action-item-card">
-                @if (photo.signedUrl) {
-                  <img
-                    class="action-thumb"
-                    [src]="photo.signedUrl"
-                    alt=""
-                    (click)="openLightbox(photo.signedUrl)"
-                  />
-                } @else {
-                  <div class="action-thumb-placeholder">
-                    <ng-icon name="heroPhoto" size="16" />
-                  </div>
-                }
-                <div class="action-content">
-                  <p class="action-desc">{{ photo.description || '(no description)' }}</p>
-                  <span class="action-room">
-                    <ng-icon name="heroMapPin" size="11" />
-                    {{ roomNameForPhoto(photo) }}
-                  </span>
-                </div>
-                <button class="resolve-btn" (click)="toggleResolve(photo)">
-                  <ng-icon name="heroCheckCircle" size="13" />
-                  Resolve
-                </button>
-              </div>
-            }
-          </div>
-        }
-
         <!-- Rooms accordion — skip rooms with no photos -->
         @for (room of roomsWithPhotos(); track room.id) {
           <div class="room-section">
@@ -504,46 +336,13 @@ import {
                           @if (photo.description) {
                             <p style="margin:0 0 0.2rem;color:#4a5568">{{ photo.description }}</p>
                           }
-                          @if (photo.is_actionable) {
-                            <span
-                              class="photo-action-badge"
-                              [class.unresolved]="!photo.is_resolved"
-                              [class.resolved]="photo.is_resolved"
-                            >
+                          @if (photo.is_flagged) {
+                            <span class="photo-flag-badge">
                               <ng-icon name="heroFlag" size="10" />
-                              {{ photo.is_resolved ? 'Resolved' : 'Unresolved' }}
+                              Flagged
                             </span>
                           }
-                          @if ((photo.tags ?? []).length > 0) {
-                            <div style="display:flex;flex-wrap:wrap;gap:0.2rem;margin-top:0.25rem">
-                              @for (tag of photo.tags; track tag.id) {
-                                <span
-                                  style="font-size:0.6875rem;padding:0.1rem 0.375rem;border-radius:9999px;background:#ebf8ff;color:#2b6cb0"
-                                  >{{ tag.name }}</span
-                                >
-                              }
-                            </div>
-                          }
                         </div>
-                        @if (photo.is_actionable && !photo.is_resolved) {
-                          <button
-                            class="resolve-btn"
-                            style="margin-top:0.375rem;width:100%"
-                            (click)="toggleResolve(photo)"
-                          >
-                            <ng-icon name="heroCheckCircle" size="12" />
-                            Mark Resolved
-                          </button>
-                        } @else if (photo.is_resolved) {
-                          <button
-                            class="resolve-btn resolved"
-                            style="margin-top:0.375rem;width:100%"
-                            (click)="toggleResolve(photo)"
-                          >
-                            <ng-icon name="heroCheckCircle" size="12" />
-                            Resolved
-                          </button>
-                        }
                       </div>
                     }
                   </div>
@@ -595,10 +394,6 @@ export class InspectionDetailComponent implements OnInit {
     () =>
       INSPECTION_TYPE_LABELS[this.inspection().inspection_type] ??
       this.inspection().inspection_type,
-  );
-
-  readonly unresolvedActionItems = computed(() =>
-    this.allPhotos().filter((p) => p.is_actionable && !p.is_resolved),
   );
 
   readonly roomsWithPhotos = computed(() =>
@@ -691,24 +486,6 @@ export class InspectionDetailComponent implements OnInit {
         },
       });
     }
-  }
-
-  toggleResolve(photo: InspectionPhoto): void {
-    const is_resolved = !photo.is_resolved;
-    this.photoService.updatePhoto(photo.id, { is_resolved }).subscribe({
-      next: () => {
-        this.allPhotos.update((prev) =>
-          prev.map((p) => (p.id === photo.id ? { ...p, is_resolved } : p)),
-        );
-        this.photosByRoom.update((prev) => {
-          const room = prev[photo.room_id] ?? [];
-          return {
-            ...prev,
-            [photo.room_id]: room.map((p) => (p.id === photo.id ? { ...p, is_resolved } : p)),
-          };
-        });
-      },
-    });
   }
 
   reopenInspection(): void {

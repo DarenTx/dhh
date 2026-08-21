@@ -170,22 +170,11 @@ function describeAuditRow(row: AuditRow): string {
       if (op === 'INSERT') return `${actor} added a photo to an inspection room`;
       if (op === 'DELETE') return `${actor} deleted an inspection photo`;
       if (op === 'UPDATE') {
-        if (d['is_resolved'] === true) return `${actor} resolved an inspection action item`;
-        if (d['is_actionable'] === true) return `${actor} flagged a photo as actionable`;
+        if (d['is_flagged'] === true) return `${actor} flagged a photo`;
+        if (d['is_flagged'] === false) return `${actor} unflagged a photo`;
         if (d['description'] !== undefined) return `${actor} updated a photo description`;
         return `${actor} updated an inspection photo`;
       }
-      break;
-    }
-
-    case 'inspection_tags': {
-      const tagName = d['name'] ?? prev['name'] ?? 'a tag';
-      if (op === 'INSERT') return `${actor} added inspection tag: ${tagName}`;
-      if (op === 'UPDATE') {
-        if (d['is_active'] === false) return `${actor} disabled inspection tag: ${tagName}`;
-        return `${actor} updated inspection tag: ${tagName}`;
-      }
-      if (op === 'DELETE') return `${actor} deleted inspection tag: ${tagName}`;
       break;
     }
   }
