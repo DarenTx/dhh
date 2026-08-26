@@ -1407,6 +1407,7 @@ export class PropertyDetailPage implements OnInit {
       ...p,
       isOccupied: this.property()?.isOccupied ?? false,
       latestMarketValue: this.property()?.latestMarketValue ?? null,
+      monthlyRent: this.property()?.monthlyRent ?? null,
     });
     this.loadCoverPhoto(p.cover_photo_url);
     this.showPropertyForm.set(false);

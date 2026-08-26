@@ -262,7 +262,12 @@ export class PropertiesPage implements OnInit {
   onSaved(property: Property): void {
     this.allProperties.update((prev) => {
       const idx = prev.findIndex((p) => p.id === property.id);
-      const withOccupancy = { ...property, isOccupied: false, latestMarketValue: null };
+      const withOccupancy = {
+        ...property,
+        isOccupied: false,
+        latestMarketValue: null,
+        monthlyRent: null,
+      };
       if (idx >= 0) {
         const updated = [...prev];
         updated[idx] = { ...prev[idx], ...property };
