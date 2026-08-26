@@ -103,6 +103,13 @@ import { PropertyWithOccupancy } from '../../../core/services/property.service';
       font-weight: 600;
       margin: 0;
     }
+
+    .monthly-rent {
+      font-size: 0.8125rem;
+      color: #276749;
+      font-weight: 600;
+      margin: 0;
+    }
   `,
   template: `
     <a class="card" [routerLink]="['/properties', property().id]">
@@ -144,6 +151,12 @@ import { PropertyWithOccupancy } from '../../../core/services/property.service';
           <p class="market-value">
             Est. value:
             {{ property().latestMarketValue!.market_value | currency: 'USD' : 'symbol' : '1.0-0' }}
+          </p>
+        }
+
+        @if (property().monthlyRent) {
+          <p class="monthly-rent">
+            Rent: {{ property().monthlyRent | currency: 'USD' : 'symbol' : '1.0-0' }}/mo
           </p>
         }
       </div>

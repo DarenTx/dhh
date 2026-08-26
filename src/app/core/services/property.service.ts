@@ -25,6 +25,7 @@ export interface Property {
 export interface PropertyWithOccupancy extends Property {
   isOccupied: boolean;
   latestMarketValue: PropertyMarketValue | null;
+  monthlyRent: number | null;
 }
 
 export type CreatePropertyData = Pick<
@@ -62,12 +63,16 @@ export class PropertyService {
     const occupiedIds$ = from(
       this.supabase
         .from('leases')
-        .select('property_id')
+        .select('property_id, monthly_rent')
         .eq('is_active', true)
         .eq('status', 'active')
         .then(({ data, error }) => {
           if (error) throw error;
-          return new Set((data ?? []).map((l: { property_id: string }) => l.property_id));
+          const rows = (data ?? []) as { property_id: string; monthly_rent: number }[];
+          return {
+            occupied: new Set(rows.map((l) => l.property_id)),
+            rentMap: new Map(rows.map((l) => [l.property_id, l.monthly_rent])),
+          };
         }),
     );
 
@@ -87,11 +92,12 @@ export class PropertyService {
     );
 
     return forkJoin([properties$, occupiedIds$, latestValues$]).pipe(
-      map(([properties, occupied, latestMap]) =>
+      map(([properties, { occupied, rentMap }, latestMap]) =>
         properties.map((p) => ({
           ...p,
           isOccupied: occupied.has(p.id),
           latestMarketValue: latestMap.get(p.id) ?? null,
+          monthlyRent: rentMap.get(p.id) ?? null,
         })),
       ),
     );
@@ -113,14 +119,15 @@ export class PropertyService {
     const occupied$ = from(
       this.supabase
         .from('leases')
-        .select('id')
+        .select('monthly_rent')
         .eq('property_id', id)
         .eq('is_active', true)
         .eq('status', 'active')
         .limit(1)
         .then(({ data, error }) => {
           if (error) throw error;
-          return (data ?? []).length > 0;
+          const rows = (data ?? []) as { monthly_rent: number }[];
+          return { isOccupied: rows.length > 0, monthlyRent: rows[0]?.monthly_rent ?? null };
         }),
     );
 
@@ -138,10 +145,11 @@ export class PropertyService {
     );
 
     return forkJoin([property$, occupied$, latestValue$]).pipe(
-      map(([property, isOccupied, latestMarketValue]) => ({
+      map(([property, { isOccupied, monthlyRent }, latestMarketValue]) => ({
         ...property,
         isOccupied,
         latestMarketValue,
+        monthlyRent,
       })),
     );
   }
