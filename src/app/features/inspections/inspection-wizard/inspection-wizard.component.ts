@@ -71,6 +71,34 @@ import { PhotoCaptureComponent } from './photo-capture/photo-capture.component';
       color: #718096;
     }
 
+    .rename-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      margin-left: 0.5rem;
+      padding: 0;
+      background: none;
+      border: none;
+      color: #2b6cb0;
+      font-size: 0.8125rem;
+      cursor: pointer;
+    }
+
+    .rename-form {
+      display: flex;
+      align-items: center;
+      gap: 0.375rem;
+    }
+
+    .rename-input {
+      flex: 1;
+      min-width: 0;
+      padding: 0.25rem 0.5rem;
+      border: 1px solid #cbd5e0;
+      border-radius: 0.375rem;
+      font-size: 0.875rem;
+    }
+
     .icon-btn {
       display: flex;
       align-items: center;
@@ -260,8 +288,35 @@ import { PhotoCaptureComponent } from './photo-capture/photo-capture.component';
         <img class="top-bar-cover" [src]="coverUrl()!" alt="Inspection cover photo" />
       }
       <div class="top-bar-title">
-        <h1>{{ propertyAddress() || inspection().title }}</h1>
-        <p>{{ inspection().title }} · {{ typeLabel() }}</p>
+        <h1>{{ propertyAddress() || title() }}</h1>
+        @if (renaming()) {
+          <div class="rename-form">
+            <input
+              class="rename-input"
+              [(ngModel)]="newTitle"
+              maxlength="100"
+              aria-label="Inspection name"
+              (keydown.enter)="saveTitle()"
+              (keydown.escape)="cancelRename()"
+            />
+            <button
+              class="add-room-save"
+              [disabled]="savingTitle() || !newTitle().trim()"
+              (click)="saveTitle()"
+            >
+              {{ savingTitle() ? 'Saving…' : 'Save' }}
+            </button>
+            <button class="add-room-cancel" (click)="cancelRename()">Cancel</button>
+          </div>
+        } @else {
+          <p>
+            {{ title() }} · {{ typeLabel() }}
+            <button class="rename-link" (click)="startRename()">
+              <ng-icon name="heroPencilSquare" size="13" />
+              Rename
+            </button>
+          </p>
+        }
       </div>
       <button class="close-btn" (click)="back.emit()">
         <ng-icon name="heroXMark" size="16" />
@@ -351,6 +406,11 @@ export class InspectionWizardComponent {
   readonly showAddRoom = signal(false);
   readonly newRoomName = signal('');
   readonly addingRoom = signal(false);
+  readonly renaming = signal(false);
+  readonly newTitle = signal('');
+  readonly savingTitle = signal(false);
+  private readonly savedTitle = signal<string | null>(null);
+  readonly title = computed(() => this.savedTitle() ?? this.inspection().title);
 
   private readonly _syncRoomsEffect = effect(() => {
     this.localRooms.set(this.initialRooms());
@@ -373,6 +433,33 @@ export class InspectionWizardComponent {
       INSPECTION_TYPE_LABELS[this.inspection().inspection_type] ??
       this.inspection().inspection_type,
   );
+
+  startRename(): void {
+    this.newTitle.set(this.title());
+    this.renaming.set(true);
+  }
+
+  cancelRename(): void {
+    this.renaming.set(false);
+  }
+
+  saveTitle(): void {
+    const title = this.newTitle().trim();
+    if (!title || this.savingTitle()) return;
+    if (title === this.title()) {
+      this.renaming.set(false);
+      return;
+    }
+    this.savingTitle.set(true);
+    this.inspectionService.updateInspection(this.inspection().id, { title }).subscribe({
+      next: (updated) => {
+        this.savedTitle.set(updated.title);
+        this.renaming.set(false);
+        this.savingTitle.set(false);
+      },
+      error: () => this.savingTitle.set(false),
+    });
+  }
 
   saveNewRoom(): void {
     const name = this.newRoomName().trim();
