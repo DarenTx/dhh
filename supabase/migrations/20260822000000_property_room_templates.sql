@@ -1,4 +1,4 @@
--- Property-level custom room templates — remembered across inspections for the same property
+-- Property-level custom room templates remembered across inspections for the same property
 
 CREATE TABLE public.property_room_templates (
   id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),

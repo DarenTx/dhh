@@ -115,8 +115,11 @@ import { INSPECTION_TYPE_LABELS, InspectionType, InspectionWithRollup } from '..
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      width: 2rem;
+      gap: 0.375rem;
+      min-width: 2rem;
       height: 2rem;
+      padding: 0 0.625rem;
+      font-size: 0.8125rem;
       border: 1px solid #e2e8f0;
       border-radius: 0.375rem;
       background: #fff;
@@ -325,6 +328,7 @@ import { INSPECTION_TYPE_LABELS, InspectionType, InspectionWithRollup } from '..
                       (click)="editInspection(insp)"
                     >
                       <ng-icon name="heroPencilSquare" size="15" />
+                      Edit
                     </button>
                     <button
                       class="btn-icon btn-icon-danger"
@@ -333,10 +337,12 @@ import { INSPECTION_TYPE_LABELS, InspectionType, InspectionWithRollup } from '..
                       (click)="deleteInspection(insp)"
                     >
                       <ng-icon name="heroTrash" size="15" />
+                      Delete
                     </button>
                   }
                   <button class="btn-icon" title="View" (click)="viewInspection(insp)">
                     <ng-icon name="heroEye" size="15" />
+                    View
                   </button>
                 </div>
               </div>
